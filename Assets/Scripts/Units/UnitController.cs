@@ -168,16 +168,17 @@ namespace Felinaria.Units
         }
 
         /// <summary>
-        /// Asegura que la unidad tenga un Collider2D para que
-        /// el ActionMenu pueda detectar clics con Physics2D.Raycast.
+        /// Asegura que la unidad tenga un Collider 3D para que
+        /// el ActionMenu pueda detectar clics con Physics.Raycast.
+        /// Si ya tiene un CapsuleCollider, BoxCollider u otro Collider 3D, lo respeta.
         /// </summary>
         private void AsegurarCollider()
         {
-            if (GetComponent<Collider2D>() == null)
+            if (GetComponent<Collider>() == null)
             {
-                var col = gameObject.AddComponent<BoxCollider2D>();
-                col.size = Vector2.one * 0.8f;  // Ligeramente menor que la celda.
-                Debug.Log($"[UnitController] '{NombreUnidad}': BoxCollider2D añadido automáticamente.");
+                var col = gameObject.AddComponent<BoxCollider>();
+                col.size = new Vector3(0.8f, 0.8f, 0.8f);
+                Debug.Log($"[UnitController] '{NombreUnidad}': BoxCollider 3D añadido automáticamente.");
             }
         }
 
