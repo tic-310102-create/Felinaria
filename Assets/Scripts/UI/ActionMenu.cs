@@ -50,15 +50,21 @@ namespace Felinaria.UI
     {
         // ── Singleton ──────────────────────────────────────────────────────────
         private static ActionMenu _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         /// <summary>Acceso global al ActionMenu con auto-instanciación segura.</summary>
         public static ActionMenu Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<ActionMenu>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("ActionMenu_Auto");
                         _instancia = go.AddComponent<ActionMenu>();
@@ -146,6 +152,7 @@ namespace Felinaria.UI
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[ActionMenu] Ya existe una instancia. Destruyendo duplicado.");
@@ -153,6 +160,19 @@ namespace Felinaria.UI
                 return;
             }
             _instancia = this;
+        }
+
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instancia == this)
+            {
+                _instancia = null;
+            }
         }
 
         private void Start()

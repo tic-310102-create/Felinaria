@@ -53,15 +53,21 @@ namespace Felinaria.Combat
     {
         // ── Singleton ──────────────────────────────────────────────────────────
         private static CombatSystem _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         /// <summary>Acceso global al CombatSystem con auto-instanciación segura.</summary>
         public static CombatSystem Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<CombatSystem>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("CombatSystem_Auto");
                         _instancia = go.AddComponent<CombatSystem>();
@@ -101,6 +107,7 @@ namespace Felinaria.Combat
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[CombatSystem] Ya existe una instancia. Destruyendo duplicado.");
@@ -108,6 +115,19 @@ namespace Felinaria.Combat
                 return;
             }
             _instancia = this;
+        }
+
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instancia == this)
+            {
+                _instancia = null;
+            }
         }
 
         // ── API pública ────────────────────────────────────────────────────────

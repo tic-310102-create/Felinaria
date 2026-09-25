@@ -66,15 +66,21 @@ namespace Felinaria.Managers
 
         // ── Singleton ──────────────────────────────────────────────────────────
         private static TurnManager _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         /// <summary>Acceso global al TurnManager con auto-instanciación segura.</summary>
         public static TurnManager Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<TurnManager>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("TurnManager_Auto");
                         _instancia = go.AddComponent<TurnManager>();
@@ -99,6 +105,7 @@ namespace Felinaria.Managers
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[TurnManager] Ya existe una instancia. Destruyendo duplicado.");
@@ -106,6 +113,19 @@ namespace Felinaria.Managers
                 return;
             }
             _instancia = this;
+        }
+
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instancia == this)
+            {
+                _instancia = null;
+            }
         }
 
         private void Start()

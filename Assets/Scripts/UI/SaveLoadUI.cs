@@ -33,14 +33,20 @@ namespace Felinaria.UI
     {
         // ── Singleton y Auto-Inicialización ────────────────────────────────────
         private static SaveLoadUI _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         public static SaveLoadUI Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<SaveLoadUI>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("SaveLoadUI_Auto");
                         _instancia = go.AddComponent<SaveLoadUI>();
@@ -54,8 +60,10 @@ namespace Felinaria.UI
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInicializarEnEscena()
         {
-            // Garantiza que SaveLoadUI siempre exista y se cree al arrancar cualquier escena
-            var _ = Instancia;
+            if (!_aplicacionCerrando)
+            {
+                var _ = Instancia;
+            }
         }
 
         // ── Inspector ──────────────────────────────────────────────────────────
@@ -76,6 +84,7 @@ namespace Felinaria.UI
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Destroy(gameObject);
@@ -147,10 +156,20 @@ namespace Felinaria.UI
                 AndroidBridge.Instancia.OnSincronizacionCompletada += OnSyncCompletada;
         }
 
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
         private void OnDestroy()
         {
-            if (AndroidBridge.Instancia != null)
+            if (AndroidBridge.InstanciaExiste)
                 AndroidBridge.Instancia.OnSincronizacionCompletada -= OnSyncCompletada;
+
+            if (_instancia == this)
+            {
+                _instancia = null;
+            }
         }
 
         private void Update()

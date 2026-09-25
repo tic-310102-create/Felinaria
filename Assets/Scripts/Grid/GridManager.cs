@@ -103,15 +103,21 @@ namespace Felinaria.Grid
         // ── Singleton ──────────────────────────────────────────────────────────
         // ── Singleton y Estado de Inicialización ───────────────────────────────
         private static GridManager _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         /// <summary>Acceso global al GridManager con auto-instanciación segura.</summary>
         public static GridManager Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<GridManager>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("GridManager_Auto");
                         _instancia = go.AddComponent<GridManager>();
@@ -135,6 +141,7 @@ namespace Felinaria.Grid
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[GridManager] Ya existe una instancia. Destruyendo duplicado.");
@@ -147,6 +154,19 @@ namespace Felinaria.Grid
             // que todas las celdas existan antes de que las unidades ejecuten Start().
             GenerarCuadricula();
             ConfigurarCamara2D();
+        }
+
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instancia == this)
+            {
+                _instancia = null;
+            }
         }
 
         private void Start()

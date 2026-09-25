@@ -98,12 +98,12 @@ namespace Felinaria.UI
 
         private void OnDestroy()
         {
-            if (CombatSystem.Instancia != null)
+            if (CombatSystem.InstanciaExiste)
             {
                 CombatSystem.Instancia.OnAtaqueRealizado -= OnAtaqueRecibido;
             }
 
-            if (SkillSystem.Instancia != null)
+            if (SkillSystem.InstanciaExiste)
             {
                 SkillSystem.Instancia.OnSkillEjecutada -= OnSkillEjecutada;
             }

@@ -30,14 +30,20 @@ namespace Felinaria.Audio
     {
         // ── Singleton ──────────────────────────────────────────────────────────
         private static AudioManager _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         public static AudioManager Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<AudioManager>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("AudioManager_Auto");
                         _instancia = go.AddComponent<AudioManager>();
@@ -107,6 +113,7 @@ namespace Felinaria.Audio
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             // Singleton con persistencia entre escenas.
             if (_instancia != null && _instancia != this)
             {
@@ -119,6 +126,19 @@ namespace Felinaria.Audio
 
             // Crear los AudioSource necesarios.
             ConfigurarAudioSources();
+        }
+
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instancia == this)
+            {
+                _instancia = null;
+            }
         }
 
         private void Start()

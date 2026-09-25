@@ -52,14 +52,20 @@ namespace Felinaria.AI
     {
         // ── Singleton ──────────────────────────────────────────────────────────
         private static EnemyAI _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         public static EnemyAI Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<EnemyAI>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("EnemyAI_Auto");
                         _instancia = go.AddComponent<EnemyAI>();
@@ -99,6 +105,7 @@ namespace Felinaria.AI
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[EnemyAI] Ya existe una instancia. Destruyendo duplicado.");
@@ -131,12 +138,31 @@ namespace Felinaria.AI
             SuscribirseATurnManager();
         }
 
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
         private void OnDisable()
         {
-            if (TurnManager.Instancia != null && _suscrito)
+            if (TurnManager.InstanciaExiste && _suscrito)
             {
                 TurnManager.Instancia.OnCambioTurno -= OnCambioTurno;
                 _suscrito = false;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (TurnManager.InstanciaExiste && _suscrito)
+            {
+                TurnManager.Instancia.OnCambioTurno -= OnCambioTurno;
+                _suscrito = false;
+            }
+
+            if (_instancia == this)
+            {
+                _instancia = null;
             }
         }
 

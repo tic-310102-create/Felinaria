@@ -26,14 +26,20 @@ namespace Felinaria.UI
     {
         // ── Singleton ──────────────────────────────────────────────────────────
         private static BattleResultUI _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         public static BattleResultUI Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<BattleResultUI>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("BattleResultUI_Auto");
                         _instancia = go.AddComponent<BattleResultUI>();
@@ -47,7 +53,10 @@ namespace Felinaria.UI
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInicializar()
         {
-            var _ = Instancia;
+            if (!_aplicacionCerrando)
+            {
+                var _ = Instancia;
+            }
         }
 
         // ── Referencias ────────────────────────────────────────────────────────
@@ -60,6 +69,7 @@ namespace Felinaria.UI
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Destroy(gameObject);
@@ -82,12 +92,22 @@ namespace Felinaria.UI
             }
         }
 
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
         private void OnDestroy()
         {
-            if (BattleManager.Instancia != null)
+            if (BattleManager.InstanciaExiste)
             {
                 BattleManager.Instancia.OnVictoria -= MostrarPantallaVictoria;
                 BattleManager.Instancia.OnDerrota -= MostrarPantallaDerrota;
+            }
+
+            if (_instancia == this)
+            {
+                _instancia = null;
             }
         }
 

@@ -33,14 +33,20 @@ namespace Felinaria.Managers
     {
         // ── Singleton ──────────────────────────────────────────────────────────
         private static BattleManager _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         public static BattleManager Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<BattleManager>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("BattleManager_Auto");
                         _instancia = go.AddComponent<BattleManager>();
@@ -54,7 +60,10 @@ namespace Felinaria.Managers
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInicializar()
         {
-            var _ = Instancia;
+            if (!_aplicacionCerrando)
+            {
+                var _ = Instancia;
+            }
         }
 
         // ── Estado público ─────────────────────────────────────────────────────
@@ -75,6 +84,7 @@ namespace Felinaria.Managers
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Destroy(gameObject);
@@ -101,16 +111,26 @@ namespace Felinaria.Managers
             _ = Felinaria.UI.BattleResultUI.Instancia;
         }
 
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
         private void OnDestroy()
         {
-            if (CombatSystem.Instancia != null)
+            if (CombatSystem.InstanciaExiste)
             {
                 CombatSystem.Instancia.OnAtaqueRealizado -= OnAtaqueRealizado;
             }
 
-            if (SkillSystem.Instancia != null)
+            if (SkillSystem.InstanciaExiste)
             {
                 SkillSystem.Instancia.OnSkillEjecutada -= OnSkillEjecutada;
+            }
+
+            if (_instancia == this)
+            {
+                _instancia = null;
             }
         }
 

@@ -25,14 +25,20 @@ namespace Felinaria.Managers
     {
         // ── Singleton ──────────────────────────────────────────────────────────
         private static SceneTransition _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         public static SceneTransition Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<SceneTransition>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("SceneTransition_Auto");
                         _instancia = go.AddComponent<SceneTransition>();
@@ -46,7 +52,10 @@ namespace Felinaria.Managers
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoInicializar()
         {
-            var _ = Instancia;
+            if (!_aplicacionCerrando)
+            {
+                var _ = Instancia;
+            }
         }
 
         // ── Configuración ──────────────────────────────────────────────────────
@@ -65,6 +74,7 @@ namespace Felinaria.Managers
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Destroy(gameObject);
@@ -74,6 +84,19 @@ namespace Felinaria.Managers
             DontDestroyOnLoad(gameObject);
 
             CrearCortinaVisual();
+        }
+
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instancia == this)
+            {
+                _instancia = null;
+            }
         }
 
         private void Start()

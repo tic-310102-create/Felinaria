@@ -42,14 +42,20 @@ namespace Felinaria.Combat
     {
         // ── Singleton ──────────────────────────────────────────────────────────
         private static SkillSystem _instancia;
+        private static bool _aplicacionCerrando = false;
+
+        /// <summary>Indica si existe una instancia activa sin forzar su creación.</summary>
+        public static bool InstanciaExiste => _instancia != null && !_aplicacionCerrando;
+
         public static SkillSystem Instancia
         {
             get
             {
+                if (_aplicacionCerrando) return null;
                 if (_instancia == null)
                 {
                     _instancia = FindFirstObjectByType<SkillSystem>();
-                    if (_instancia == null)
+                    if (_instancia == null && Application.isPlaying)
                     {
                         var go = new GameObject("SkillSystem_Auto");
                         _instancia = go.AddComponent<SkillSystem>();
@@ -71,6 +77,7 @@ namespace Felinaria.Combat
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
+            _aplicacionCerrando = false;
             if (_instancia != null && _instancia != this)
             {
                 Destroy(gameObject);
@@ -78,6 +85,19 @@ namespace Felinaria.Combat
             }
             _instancia = this;
             InicializarHabilidadesDefault();
+        }
+
+        private void OnApplicationQuit()
+        {
+            _aplicacionCerrando = true;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instancia == this)
+            {
+                _instancia = null;
+            }
         }
 
         private static void InicializarHabilidadesDefault()
