@@ -184,33 +184,93 @@ namespace Felinaria.Units
 
         // ── Inicialización ─────────────────────────────────────────────────────
         /// <summary>
-        /// Coloca la unidad en su celda de inicio y la registra en GridManager.
+        /// Coloca la unidad en su celda de inicio y la registra en GridManager y TurnManager.
+        /// Garantiza que el GridManager esté listo antes de registrar ocupación.
         /// </summary>
         private void InicializarEnCuadricula()
         {
             if (GridManager.Instancia == null)
             {
-                Debug.LogError($"[UnitController] '{NombreUnidad}': No se encontró GridManager en la escena.");
-                return;
+                // Fallback por si la instancia estática aún no se asignó
+                var gridEnEscena = FindObjectOfType<GridManager>();
+                if (gridEnEscena == null)
+                {
+                    Debug.LogError($"[UnitController] '{NombreUnidad}': No se encontró GridManager en la escena.");
+                    return;
+                }
             }
 
-            // Verificar que la celda inicial existe y está libre.
-            if (!GridManager.Instancia.EstaCeldaLibre(ColInicial, FilaInicial))
+            // Asegurar que el GridManager haya generado las celdas antes de interactuar
+            if (!GridManager.Instancia.EstaInicializado)
             {
-                Debug.LogWarning($"[UnitController] '{NombreUnidad}': Celda inicial ({ColInicial},{FilaInicial}) " +
-                                 "está ocupada o no existe. Usando (0,0).");
+                GridManager.Instancia.GenerarCuadricula();
+            }
+
+            // Validar que las coordenadas iniciales estén dentro de los límites del tablero
+            if (!GridManager.Instancia.EsCoordenadaValida(ColInicial, FilaInicial))
+            {
+                Debug.LogWarning($"[UnitController] '{NombreUnidad}': Coordenada inicial ({ColInicial},{FilaInicial}) " +
+                                 "fuera de los límites del tablero. Reubicando en (0,0).");
                 ColInicial  = 0;
                 FilaInicial = 0;
             }
 
-            // Mover el transform directamente (solo al inicio, sin interpolación).
+            // Verificar si la celda inicial está libre; si no, buscar la primera disponible
+            if (!GridManager.Instancia.EstaCeldaLibre(ColInicial, FilaInicial))
+            {
+                Debug.LogWarning($"[UnitController] '{NombreUnidad}': Celda ({ColInicial},{FilaInicial}) " +
+                                 "ya está ocupada. Buscando celda libre más cercana...");
+                Vector2Int celdaLibre = EncontrarCeldaLibreMasCercana(ColInicial, FilaInicial);
+                ColInicial  = celdaLibre.x;
+                FilaInicial = celdaLibre.y;
+            }
+
+            // Posicionar el transform en el centro de la celda en el mundo
             Coordenada = new Vector2Int(ColInicial, FilaInicial);
             transform.position = GridManager.Instancia.CoordenadaAMundo(Coordenada);
 
-            // Marcar la celda como ocupada en el GridManager.
+            // Registrar ocupación en el GridManager
             GridManager.Instancia.SetOcupacion(Coordenada.x, Coordenada.y, true);
 
-            Debug.Log($"[UnitController] '{NombreUnidad}' inicializado en ({Coordenada.x},{Coordenada.y}).");
+            // Auto-registro en TurnManager si no está en la lista
+            if (TurnManager.Instancia != null)
+            {
+                if (BandoUnidad == Bando.Jugador && !TurnManager.Instancia.UnidadesJugador.Contains(this))
+                {
+                    TurnManager.Instancia.RegistrarUnidad(this);
+                }
+                else if (BandoUnidad == Bando.Enemigo && !TurnManager.Instancia.UnidadesEnemigo.Contains(this))
+                {
+                    TurnManager.Instancia.RegistrarUnidad(this);
+                }
+            }
+
+            Debug.Log($"[UnitController] '{NombreUnidad}' ({BandoUnidad}) inicializado correctamente en ({Coordenada.x},{Coordenada.y}).");
+        }
+
+        /// <summary>
+        /// Busca la celda libre más cercana a la coordenada deseada.
+        /// </summary>
+        private Vector2Int EncontrarCeldaLibreMasCercana(int colOrig, int filaOrig)
+        {
+            if (GridManager.Instancia == null) return new Vector2Int(colOrig, filaOrig);
+
+            for (int r = 0; r < Mathf.Max(GridManager.Instancia.Columnas, GridManager.Instancia.Filas); r++)
+            {
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    for (int dy = -r; dy <= r; dy++)
+                    {
+                        int c = colOrig + dx;
+                        int f = filaOrig + dy;
+                        if (GridManager.Instancia.EsCoordenadaValida(c, f) && GridManager.Instancia.EstaCeldaLibre(c, f))
+                        {
+                            return new Vector2Int(c, f);
+                        }
+                    }
+                }
+            }
+            return new Vector2Int(colOrig, filaOrig);
         }
 
         // ── Movimiento ─────────────────────────────────────────────────────────

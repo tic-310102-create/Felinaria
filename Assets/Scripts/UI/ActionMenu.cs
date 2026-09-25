@@ -191,14 +191,32 @@ namespace Felinaria.UI
         /// </summary>
         private void IntentarSeleccionarUnidad(Ray ray)
         {
-            // Raycast 3D para detectar colisiones con unidades (CapsuleCollider / BoxCollider / etc.)
-            if (!Physics.Raycast(ray, out RaycastHit hit, 1000f)) return;
+            // RaycastAll 3D para asegurar que encontramos la unidad incluso si hay colliders de celdas o triggers superpuestos.
+            RaycastHit[] hits = Physics.RaycastAll(ray, 1000f, ~0, QueryTriggerInteraction.Collide);
+            if (hits == null || hits.Length == 0) return;
 
-            var unidad = hit.collider.GetComponentInParent<UnitController>() ?? hit.collider.GetComponent<UnitController>();
+            // Ordenar por cercanía a la cámara
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+            UnitController unidad = null;
+            foreach (var hit in hits)
+            {
+                var u = hit.collider.GetComponentInParent<UnitController>() ?? hit.collider.GetComponent<UnitController>();
+                if (u != null)
+                {
+                    unidad = u;
+                    break;
+                }
+            }
+
             if (unidad == null) return;
 
             // Solo se pueden seleccionar unidades del jugador.
-            if (unidad.BandoUnidad != Bando.Jugador) return;
+            if (unidad.BandoUnidad != Bando.Jugador)
+            {
+                Debug.Log($"[ActionMenu] '{unidad.NombreUnidad}' es enemiga. No puedes seleccionarla directamente.");
+                return;
+            }
 
             // No seleccionar unidades que ya actuaron.
             if (unidad.YaActuoEsteTurno)
@@ -216,7 +234,7 @@ namespace Felinaria.UI
         private void SeleccionarUnidad(UnitController unidad)
         {
             UnidadSeleccionada = unidad;
-            Debug.Log($"[ActionMenu] Unidad seleccionada: '{unidad.NombreUnidad}'");
+            Debug.Log($"[ActionMenu] Unidad seleccionada: '{unidad.NombreUnidad}' en ({unidad.Coordenada.x},{unidad.Coordenada.y})");
 
             MostrarMenu();
         }
@@ -236,19 +254,28 @@ namespace Felinaria.UI
             bool hayImpacto = false;
 
             // 1. Intentar Raycast 3D contra colliders de la escena (celdas o terreno)
-            if (Physics.Raycast(ray, out RaycastHit hit, 1000f))
+            if (Physics.Raycast(ray, out RaycastHit hit, 1000f, ~0, QueryTriggerInteraction.Collide))
             {
                 puntoImpacto = hit.point;
                 hayImpacto = true;
             }
             else
             {
-                // 2. Si las celdas no tienen collider, intersectar con el plano del tablero (plano XY en OrigenMundo)
+                // 2. Si las celdas no tienen collider, intersectar con el plano del tablero
                 Plane planoTablero = new Plane(Vector3.forward, GridManager.Instancia.OrigenMundo);
                 if (planoTablero.Raycast(ray, out float distancia))
                 {
                     puntoImpacto = ray.GetPoint(distancia);
                     hayImpacto = true;
+                }
+                else
+                {
+                    Plane planoInvertido = new Plane(-Vector3.forward, GridManager.Instancia.OrigenMundo);
+                    if (planoInvertido.Raycast(ray, out distancia))
+                    {
+                        puntoImpacto = ray.GetPoint(distancia);
+                        hayImpacto = true;
+                    }
                 }
             }
 
@@ -288,19 +315,27 @@ namespace Felinaria.UI
                 return;
             }
 
-            // Raycast 3D para encontrar la unidad enemiga clickeada.
-            if (!Physics.Raycast(ray, out RaycastHit hit, 1000f))
+            // RaycastAll 3D para encontrar la unidad enemiga clickeada.
+            RaycastHit[] hits = Physics.RaycastAll(ray, 1000f, ~0, QueryTriggerInteraction.Collide);
+            UnitController objetivo = null;
+
+            if (hits != null && hits.Length > 0)
             {
-                Debug.Log("[ActionMenu] No se detectó ninguna unidad en esa posición.");
-                LimpiarResaltado();
-                ModoActual = ModoInteraccion.Seleccion;
-                return;
+                System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+                foreach (var hit in hits)
+                {
+                    var u = hit.collider.GetComponentInParent<UnitController>() ?? hit.collider.GetComponent<UnitController>();
+                    if (u != null && u.BandoUnidad == Bando.Enemigo)
+                    {
+                        objetivo = u;
+                        break;
+                    }
+                }
             }
 
-            var objetivo = hit.collider.GetComponentInParent<UnitController>() ?? hit.collider.GetComponent<UnitController>();
-            if (objetivo == null || objetivo.BandoUnidad == Bando.Jugador)
+            if (objetivo == null)
             {
-                Debug.Log("[ActionMenu] Solo puedes atacar unidades enemigas.");
+                Debug.Log("[ActionMenu] No se detectó ninguna unidad enemiga en esa posición.");
                 LimpiarResaltado();
                 ModoActual = ModoInteraccion.Seleccion;
                 return;

@@ -101,8 +101,12 @@ namespace Felinaria.Grid
         public List<AsignacionTerreno> AsignacionesTerreno = new List<AsignacionTerreno>();
 
         // ── Singleton ──────────────────────────────────────────────────────────
+        // ── Singleton y Estado de Inicialización ───────────────────────────────
         /// <summary>Acceso global al GridManager desde cualquier script.</summary>
         public static GridManager Instancia { get; private set; }
+
+        /// <summary>Indica si el tablero ya fue generado y sus celdas están listas para consultarse.</summary>
+        public bool EstaInicializado { get; private set; } = false;
 
         // ── Estado interno ─────────────────────────────────────────────────────
         // Diccionario principal: clave = (col, fila), valor = datos de la celda.
@@ -122,17 +126,25 @@ namespace Felinaria.Grid
                 return;
             }
             Instancia = this;
+
+            // Generar la cuadrícula inmediatamente en Awake para asegurar
+            // que todas las celdas existan antes de que las unidades ejecuten Start().
+            GenerarCuadricula();
         }
 
         private void Start()
         {
-            GenerarCuadricula();
+            // Verificación de respaldo si no fue generado en Awake
+            if (!EstaInicializado)
+            {
+                GenerarCuadricula();
+            }
         }
 
         // ── Generación ─────────────────────────────────────────────────────────
         /// <summary>
         /// Instancia todos los objetos de celda y rellena el diccionario.
-        /// Llamado automáticamente en Start, pero también puede invocarse
+        /// Llamado automáticamente en Awake, pero también puede invocarse
         /// manualmente para regenerar el tablero en runtime.
         /// </summary>
         public void GenerarCuadricula()
@@ -155,6 +167,8 @@ namespace Felinaria.Grid
 
             // Aplicar terrenos configurados desde el Inspector (Fase 3).
             AplicarTerrenosDesdeInspector();
+
+            EstaInicializado = true;
 
             Debug.Log($"[GridManager] Cuadrícula generada: {Columnas}x{Filas} = {Columnas * Filas} celdas.");
         }
