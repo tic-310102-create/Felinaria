@@ -19,6 +19,7 @@ using System;
 using UnityEngine;
 using Felinaria.Units;
 using Felinaria.Managers;
+using Felinaria.Grid;
 
 namespace Felinaria.Combat
 {

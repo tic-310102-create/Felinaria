@@ -15,6 +15,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using Felinaria.Managers;
 using Felinaria.Data;
+using Felinaria.Grid;
 
 namespace Felinaria.UI
 {

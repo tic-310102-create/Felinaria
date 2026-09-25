@@ -16,6 +16,7 @@ using UnityEngine;
 using Felinaria.Units;
 using Felinaria.Combat;
 using Felinaria.Audio;
+using Felinaria.Grid;
 
 namespace Felinaria.Managers
 {
