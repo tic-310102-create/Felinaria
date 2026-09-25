@@ -67,6 +67,13 @@ namespace Felinaria.Units
         [Range(1, 999)]
         public int VidaMaxima = 30;
 
+        [Tooltip("Puntos de Maná máximos para habilidades.")]
+        [Range(0, 999)]
+        public int ManaMaximo = 20;
+
+        [Header("Habilidades Activas")]
+        public System.Collections.Generic.List<Felinaria.Data.SkillData> Habilidades = new System.Collections.Generic.List<Felinaria.Data.SkillData>();
+
         [Tooltip("Puntos de ataque físico.")]
         [Range(0, 99)]
         public int Ataque = 8;
@@ -104,6 +111,11 @@ namespace Felinaria.Units
         /// <summary>Vida actual de la unidad.</summary>
         public int VidaActual { get; private set; }
 
+        /// <summary>Maná actual de la unidad.</summary>
+        public int ManaActual { get; private set; }
+
+        private System.Collections.Generic.Dictionary<string, int> _cooldowns = new System.Collections.Generic.Dictionary<string, int>();
+
         /// <summary>Coordenada actual en la cuadrícula.</summary>
         public Vector2Int Coordenada { get; private set; }
 
@@ -127,6 +139,13 @@ namespace Felinaria.Units
             CargarDesdeScriptableObject();
 
             VidaActual = VidaMaxima;
+            ManaActual = ManaMaximo;
+
+            // Auto-asignar habilidades predeterminadas si no tiene ninguna
+            if (Habilidades == null || Habilidades.Count == 0)
+            {
+                Habilidades = Felinaria.Combat.SkillSystem.ObtenerHabilidadesPredeterminadas();
+            }
 
             // Asegurar componentes 2D puros (SpriteRenderer, BoxCollider2D, Z=0)
             AsegurarComponentes2D();
@@ -156,6 +175,7 @@ namespace Felinaria.Units
 
             NombreUnidad      = FichaStats.NombrePersonaje;
             VidaMaxima        = FichaStats.VidaMaxima;
+            ManaMaximo        = FichaStats.ManaMaximo;
             Ataque            = FichaStats.Ataque;
             Defensa           = FichaStats.Defensa;
             RangoMovimiento   = FichaStats.RangoMovimiento;
@@ -164,6 +184,11 @@ namespace Felinaria.Units
             RangoAtaqueMaximo = FichaStats.RangoAtaqueMaximo;
             ColorNormal       = FichaStats.ColorGraybox;
             ColorUsado        = FichaStats.ColorUsado;
+
+            if (FichaStats.Habilidades != null && FichaStats.Habilidades.Count > 0)
+            {
+                Habilidades = new System.Collections.Generic.List<Felinaria.Data.SkillData>(FichaStats.Habilidades);
+            }
 
             // Aplicar color graybox inmediatamente.
             AplicarColorVisual(ColorNormal);
@@ -460,22 +485,106 @@ namespace Felinaria.Units
         }
 
         /// <summary>
-        /// Reinicia el estado de la unidad al comienzo de un nuevo turno.
-        /// Llamado por TurnManager al cambiar de turno.
+        /// Obtiene los turnos restantes de cooldown para una habilidad dada.
+        /// </summary>
+        public int ObtenerCooldown(Felinaria.Data.SkillData skill)
+        {
+            if (skill == null || string.IsNullOrEmpty(skill.IdHabilidad)) return 0;
+            return _cooldowns.ContainsKey(skill.IdHabilidad) ? _cooldowns[skill.IdHabilidad] : 0;
+        }
+
+        /// <summary>
+        /// Valida si la unidad tiene suficiente maná y no está en cooldown para usar la habilidad.
+        /// </summary>
+        public bool PuedeUsarSkill(Felinaria.Data.SkillData skill)
+        {
+            if (skill == null) return false;
+            return ManaActual >= skill.CostoMana && ObtenerCooldown(skill) == 0;
+        }
+
+        /// <summary>
+        /// Descuenta maná de la unidad y actualiza la barra visual.
+        /// </summary>
+        public void ConsumirMana(int cantidad)
+        {
+            ManaActual = Mathf.Max(0, ManaActual - cantidad);
+            var hb = GetComponent<Felinaria.UI.HealthBar>();
+            if (hb != null) hb.ActualizarBarra();
+        }
+
+        /// <summary>
+        /// Recupera maná hasta el máximo.
+        /// </summary>
+        public void RecuperarMana(int cantidad)
+        {
+            ManaActual = Mathf.Min(ManaMaximo, ManaActual + cantidad);
+            var hb = GetComponent<Felinaria.UI.HealthBar>();
+            if (hb != null) hb.ActualizarBarra();
+        }
+
+        /// <summary>
+        /// Inicia el contador de cooldown para una habilidad.
+        /// </summary>
+        public void IniciarCooldown(Felinaria.Data.SkillData skill)
+        {
+            if (skill != null && skill.CooldownMaximo > 0)
+            {
+                _cooldowns[skill.IdHabilidad] = skill.CooldownMaximo;
+            }
+        }
+
+        /// <summary>
+        /// Reduce en 1 los cooldowns activos al inicio de cada nuevo turno.
+        /// </summary>
+        public void ReducirCooldowns()
+        {
+            var llaves = new System.Collections.Generic.List<string>(_cooldowns.Keys);
+            foreach (var k in llaves)
+            {
+                if (_cooldowns[k] > 0)
+                {
+                    _cooldowns[k]--;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reinicia el estado de la unidad al comienzo de un nuevo turno y decrementa cooldowns.
         /// </summary>
         public void ReiniciarTurno()
         {
             YaActuoEsteTurno = false;
             AplicarColorVisual(ColorNormal);
+            ReducirCooldowns();
         }
 
         /// <summary>
-        /// Restaura el estado guardado de la unidad (coordenadas lógicas, posición mundo, vida, turno y visuales).
+        /// Restaura puntos de vida y actualiza la interfaz visual.
         /// </summary>
-        public void RestaurarEstado(int col, int fila, int vida, int vidaMax, bool yaActuo, bool estaViva)
+        public void Curar(int cantidad)
+        {
+            if (VidaActual <= 0) return;
+            VidaActual = Mathf.Min(VidaMaxima, VidaActual + cantidad);
+            Debug.Log($"[UnitController] '{NombreUnidad}' se curó {cantidad} HP. Vida: {VidaActual}/{VidaMaxima}");
+
+            var healthBar = GetComponent<Felinaria.UI.HealthBar>();
+            if (healthBar != null)
+            {
+                healthBar.ActualizarBarra();
+            }
+        }
+
+        /// <summary>
+        /// Restaura el estado guardado de la unidad (coordenadas lógicas, posición mundo, vida, maná, turno y visuales).
+        /// </summary>
+        public void RestaurarEstado(int col, int fila, int vida, int vidaMax, int mana, int manaMax, bool yaActuo, bool estaViva)
         {
             if (vidaMax > 0) VidaMaxima = vidaMax;
             VidaActual = Mathf.Clamp(vida, 0, VidaMaxima);
+
+            if (manaMax > 0) ManaMaximo = manaMax;
+            ManaActual = Mathf.Clamp(mana, 0, ManaMaximo);
+
             ColInicial = col;
             FilaInicial = fila;
             Coordenada = new Vector2Int(col, fila);
@@ -493,7 +602,7 @@ namespace Felinaria.Units
 
             AplicarColorVisual(yaActuo ? ColorUsado : ColorNormal);
 
-            // Actualizar barra de vida
+            // Actualizar barra de vida y maná
             var healthBar = GetComponent<Felinaria.UI.HealthBar>();
             if (healthBar != null)
             {
@@ -509,7 +618,12 @@ namespace Felinaria.Units
                 gameObject.SetActive(true);
             }
 
-            Debug.Log($"[UnitController] '{NombreUnidad}' restaurado: Pos=({col},{fila}), HP={VidaActual}/{VidaMaxima}, Actuo={yaActuo}");
+            Debug.Log($"[UnitController] '{NombreUnidad}' restaurado: Pos=({col},{fila}), HP={VidaActual}/{VidaMaxima}, MP={ManaActual}/{ManaMaximo}, Actuo={yaActuo}");
+        }
+
+        public void RestaurarEstado(int col, int fila, int vida, int vidaMax, bool yaActuo, bool estaViva)
+        {
+            RestaurarEstado(col, fila, vida, vidaMax, ManaMaximo, ManaMaximo, yaActuo, estaViva);
         }
 
         // ── Combate ────────────────────────────────────────────────────────────

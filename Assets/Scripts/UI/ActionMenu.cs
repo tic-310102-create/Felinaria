@@ -34,10 +34,12 @@ namespace Felinaria.UI
     /// </summary>
     public enum ModoInteraccion
     {
-        Seleccion,       // Esperando que el jugador seleccione una unidad.
-        MenuVisible,     // El menú de acciones está abierto.
-        EsperandoMover,  // Esperando que el jugador haga clic en una celda destino.
-        EsperandoAtacar, // Esperando que el jugador haga clic en un enemigo.
+        Seleccion,              // Esperando que el jugador seleccione una unidad.
+        MenuVisible,            // El menú de acciones principal está abierto.
+        EsperandoMover,         // Esperando que el jugador haga clic en una celda destino.
+        EsperandoAtacar,        // Esperando que el jugador haga clic en un enemigo.
+        MenuSkillsVisible,      // El submenú de habilidades/magia está abierto.
+        EsperandoObjetivoSkill  // Esperando que el jugador seleccione objetivo para una habilidad/AoE.
     }
 
     /// <summary>
@@ -93,6 +95,9 @@ namespace Felinaria.UI
         [Tooltip("Color del botón Atacar.")]
         public Color ColorBotonAtacar  = new Color(0.9f, 0.2f, 0.2f, 1f);
 
+        [Tooltip("Color del botón Magia / Habilidades.")]
+        public Color ColorBotonHabilidad = new Color(0.62f, 0.28f, 0.92f, 1f);
+
         [Tooltip("Color del botón Esperar.")]
         public Color ColorBotonEsperar = new Color(0.7f, 0.7f, 0.7f, 1f);
 
@@ -106,6 +111,12 @@ namespace Felinaria.UI
         [Tooltip("Color para resaltar los enemigos que puedes atacar.")]
         public Color ColorResaltadoAtacar = new Color(1f, 0.3f, 0.3f, 0.5f);
 
+        [Tooltip("Color para resaltar el rango de habilidades mágicas.")]
+        public Color ColorResaltadoSkill  = new Color(0.65f, 0.35f, 1f, 0.55f);
+
+        [Tooltip("Color para previsualizar área de impacto AoE.")]
+        public Color ColorPreviewAoE      = new Color(1f, 0.75f, 0.2f, 0.65f);
+
         // ── Estado interno ─────────────────────────────────────────────────────
         /// <summary>Modo de interacción actual.</summary>
         public ModoInteraccion ModoActual { get; private set; } = ModoInteraccion.Seleccion;
@@ -113,14 +124,20 @@ namespace Felinaria.UI
         /// <summary>Unidad actualmente seleccionada por el jugador.</summary>
         public UnitController UnidadSeleccionada { get; private set; }
 
+        // Habilidad seleccionada para lanzamiento
+        private Felinaria.Data.SkillData _skillSeleccionada;
+
         // Objetos UI del menú.
         private GameObject _panelMenu;
+        private GameObject _panelSkillMenu;
         private Button _botonMover;
         private Button _botonAtacar;
+        private Button _botonHabilidad;
         private Button _botonEsperar;
 
         // Celdas resaltadas para limpiar después.
         private List<SpriteRenderer> _celdasResaltadas = new List<SpriteRenderer>();
+        private List<SpriteRenderer> _celdasAoEPreview = new List<SpriteRenderer>();
         private Dictionary<SpriteRenderer, Color> _coloresOriginales = new Dictionary<SpriteRenderer, Color>();
 
         // Cámara principal cacheada.
@@ -242,6 +259,10 @@ namespace Felinaria.UI
 
                 case ModoInteraccion.EsperandoAtacar:
                     IntentarAtacar2D(world2D);
+                    break;
+
+                case ModoInteraccion.EsperandoObjetivoSkill:
+                    IntentarEjecutarSkill2D(world2D);
                     break;
             }
         }
@@ -433,6 +454,39 @@ namespace Felinaria.UI
             UnidadSeleccionada = null;
         }
 
+        /// <summary>
+        /// Intenta ejecutar la habilidad activa en la celda clickeada.
+        /// </summary>
+        private void IntentarEjecutarSkill2D(Vector2 worldPos)
+        {
+            if (UnidadSeleccionada == null || _skillSeleccionada == null || GridManager.Instancia == null)
+            {
+                CerrarMenu();
+                return;
+            }
+
+            Vector2Int coordDestino = GridManager.Instancia.MundoACoordenada(new Vector3(worldPos.x, worldPos.y, 0f));
+
+            if (Combat.SkillSystem.Instancia != null)
+            {
+                bool exito = Combat.SkillSystem.Instancia.EjecutarHabilidad(UnidadSeleccionada, _skillSeleccionada, coordDestino);
+                if (exito)
+                {
+                    Debug.Log($"[ActionMenu] ✨ '{_skillSeleccionada.NombreHabilidad}' lanzada con éxito hacia ({coordDestino.x},{coordDestino.y}).");
+                }
+                else
+                {
+                    Debug.Log($"[ActionMenu] No se pudo lanzar '{_skillSeleccionada.NombreHabilidad}' en esa celda.");
+                }
+            }
+
+            LimpiarResaltado();
+            LimpiarPreviewAoE();
+            ModoActual = ModoInteraccion.Seleccion;
+            UnidadSeleccionada = null;
+            _skillSeleccionada = null;
+        }
+
         // ── Acciones de los botones ────────────────────────────────────────────
         /// <summary>
         /// Callback del botón "Mover".
@@ -465,6 +519,34 @@ namespace Felinaria.UI
         }
 
         /// <summary>
+        /// Callback del botón "Magia / Habilidades".
+        /// Abre el submenú con las habilidades activas de la unidad.
+        /// </summary>
+        public void OnBotonHabilidad()
+        {
+            if (UnidadSeleccionada == null) return;
+
+            Debug.Log($"[ActionMenu] Abriendo submenú de Habilidades para '{UnidadSeleccionada.NombreUnidad}'.");
+            OcultarMenu();
+            MostrarSkillMenu();
+        }
+
+        /// <summary>
+        /// Callback al elegir una habilidad específica en el submenú.
+        /// </summary>
+        public void OnSeleccionarSkill(Felinaria.Data.SkillData skill)
+        {
+            if (UnidadSeleccionada == null || skill == null) return;
+
+            _skillSeleccionada = skill;
+            Debug.Log($"[ActionMenu] Habilidad seleccionada: '{skill.NombreHabilidad}'. Esperando objetivo...");
+            OcultarSkillMenu();
+            ModoActual = ModoInteraccion.EsperandoObjetivoSkill;
+
+            ResaltarCeldasSkill(skill);
+        }
+
+        /// <summary>
         /// Callback del botón "Esperar".
         /// La unidad pasa su turno sin hacer nada.
         /// </summary>
@@ -488,6 +570,8 @@ namespace Felinaria.UI
         {
             if (_panelMenu == null || UnidadSeleccionada == null) return;
 
+            OcultarSkillMenu();
+
             // Convertir posición de la unidad (mundo) a posición de pantalla (UI).
             Vector3 posPantalla = _camaraPrincipal.WorldToScreenPoint(UnidadSeleccionada.transform.position);
 
@@ -498,6 +582,12 @@ namespace Felinaria.UI
             // Habilitar/deshabilitar botón atacar según si hay enemigos en rango.
             bool hayObjetivos = ExistenEnemigosEnRango();
             _botonAtacar.interactable = hayObjetivos;
+
+            // Habilitar botón de magia si tiene habilidades configuradas
+            if (_botonHabilidad != null)
+            {
+                _botonHabilidad.interactable = (UnidadSeleccionada.Habilidades != null && UnidadSeleccionada.Habilidades.Count > 0);
+            }
 
             _panelMenu.SetActive(true);
             ModoActual = ModoInteraccion.MenuVisible;
@@ -510,42 +600,35 @@ namespace Felinaria.UI
         {
             if (_panelMenu != null)
                 _panelMenu.SetActive(false);
+            OcultarSkillMenu();
         }
 
         /// <summary>
-        /// Lanza un rayo contra colliders de la escena o el plano del tablero
-        /// y devuelve el punto de impacto en coordenadas mundo.
+        /// Muestra el submenú con las habilidades de la unidad.
         /// </summary>
-        private bool ObtenerPuntoImpactoTablero(Ray ray, out Vector3 puntoImpacto)
+        private void MostrarSkillMenu()
         {
-            puntoImpacto = Vector3.zero;
+            if (CanvasPrincipal == null || UnidadSeleccionada == null) return;
 
-            // 1. Intentar Raycast 3D contra colliders
-            if (Physics.Raycast(ray, out RaycastHit hit, 1000f, ~0, QueryTriggerInteraction.Collide))
+            if (_panelSkillMenu == null)
             {
-                puntoImpacto = hit.point;
-                return true;
+                CrearSkillMenuUI();
             }
 
-            // 2. Fallback: intersectar con el plano del tablero
-            if (GridManager.Instancia != null)
-            {
-                Plane planoTablero = new Plane(Vector3.forward, GridManager.Instancia.OrigenMundo);
-                if (planoTablero.Raycast(ray, out float distancia))
-                {
-                    puntoImpacto = ray.GetPoint(distancia);
-                    return true;
-                }
+            ReconstruirBotonesSkills();
 
-                Plane planoInvertido = new Plane(-Vector3.forward, GridManager.Instancia.OrigenMundo);
-                if (planoInvertido.Raycast(ray, out distancia))
-                {
-                    puntoImpacto = ray.GetPoint(distancia);
-                    return true;
-                }
-            }
+            Vector3 posPantalla = _camaraPrincipal.WorldToScreenPoint(UnidadSeleccionada.transform.position);
+            var rectPanel = _panelSkillMenu.GetComponent<RectTransform>();
+            rectPanel.position = posPantalla + (Vector3)OffsetMenu;
 
-            return false;
+            _panelSkillMenu.SetActive(true);
+            ModoActual = ModoInteraccion.MenuSkillsVisible;
+        }
+
+        private void OcultarSkillMenu()
+        {
+            if (_panelSkillMenu != null)
+                _panelSkillMenu.SetActive(false);
         }
 
         /// <summary>
@@ -555,8 +638,10 @@ namespace Felinaria.UI
         {
             OcultarMenu();
             LimpiarResaltado();
+            LimpiarPreviewAoE();
             ModoActual = ModoInteraccion.Seleccion;
             UnidadSeleccionada = null;
+            _skillSeleccionada = null;
         }
 
         // ── Resaltado de celdas ────────────────────────────────────────────────
@@ -628,10 +713,111 @@ namespace Felinaria.UI
         }
 
         /// <summary>
+        /// Resalta las celdas alcanzables para el lanzamiento de la habilidad seleccionada.
+        /// </summary>
+        private void ResaltarCeldasSkill(Felinaria.Data.SkillData skill)
+        {
+            LimpiarResaltado();
+
+            if (UnidadSeleccionada == null || skill == null || Combat.SkillSystem.Instancia == null) return;
+
+            var celdas = Combat.SkillSystem.Instancia.ObtenerCeldasEnRango(UnidadSeleccionada, skill);
+            Color colorResaltado = (skill.Tipo == Felinaria.Data.TipoHabilidad.Curacion)
+                ? new Color(0.3f, 0.9f, 0.4f, 0.6f)
+                : ColorResaltadoSkill;
+
+            foreach (var c in celdas)
+            {
+                var celda = GridManager.Instancia.ObtenerCelda(c.x, c.y);
+                if (celda?.Objeto != null)
+                {
+                    var sr = celda.Objeto.GetComponent<SpriteRenderer>();
+                    if (sr != null)
+                    {
+                        if (!_coloresOriginales.ContainsKey(sr))
+                            _coloresOriginales[sr] = sr.color;
+                        sr.color = colorResaltado;
+                        _celdasResaltadas.Add(sr);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Previsualiza dinámicamente el área AoE bajo el cursor en tiempo real.
+        /// </summary>
+        private void ActualizarPreviewAoE()
+        {
+            if (ModoActual != ModoInteraccion.EsperandoObjetivoSkill || _skillSeleccionada == null || _skillSeleccionada.RadioArea <= 0)
+            {
+                LimpiarPreviewAoE();
+                return;
+            }
+
+            if (_camaraPrincipal == null) return;
+
+            Vector3 mousePos = Input.mousePosition;
+            mousePos.z = -_camaraPrincipal.transform.position.z;
+            Vector3 world3D = _camaraPrincipal.ScreenToWorldPoint(mousePos);
+            Vector2Int coordCursor = GridManager.Instancia.MundoACoordenada(world3D);
+
+            if (!GridManager.Instancia.EsCoordenadaValida(coordCursor) ||
+                !Combat.SkillSystem.Instancia.EsCeldaEnRango(UnidadSeleccionada, _skillSeleccionada, coordCursor))
+            {
+                LimpiarPreviewAoE();
+                return;
+            }
+
+            var celdasArea = Combat.SkillSystem.Instancia.ObtenerCeldasAfectadasArea(coordCursor, _skillSeleccionada);
+
+            LimpiarPreviewAoE();
+
+            foreach (var c in celdasArea)
+            {
+                var celda = GridManager.Instancia.ObtenerCelda(c.x, c.y);
+                if (celda?.Objeto != null)
+                {
+                    var sr = celda.Objeto.GetComponent<SpriteRenderer>();
+                    if (sr != null)
+                    {
+                        if (!_coloresOriginales.ContainsKey(sr))
+                            _coloresOriginales[sr] = sr.color;
+                        sr.color = ColorPreviewAoE;
+                        _celdasAoEPreview.Add(sr);
+                    }
+                }
+            }
+        }
+
+        private void LimpiarPreviewAoE()
+        {
+            foreach (var sr in _celdasAoEPreview)
+            {
+                if (sr != null && _coloresOriginales.ContainsKey(sr))
+                {
+                    // Si la celda aún está en el rango principal de la habilidad, volver al color de rango
+                    if (_celdasResaltadas.Contains(sr))
+                    {
+                        Color colorSkill = (_skillSeleccionada != null && _skillSeleccionada.Tipo == Felinaria.Data.TipoHabilidad.Curacion)
+                            ? new Color(0.3f, 0.9f, 0.4f, 0.6f)
+                            : ColorResaltadoSkill;
+                        sr.color = colorSkill;
+                    }
+                    else
+                    {
+                        sr.color = _coloresOriginales[sr];
+                    }
+                }
+            }
+            _celdasAoEPreview.Clear();
+        }
+
+        /// <summary>
         /// Restaura los colores originales de todas las celdas resaltadas.
         /// </summary>
         private void LimpiarResaltado()
         {
+            LimpiarPreviewAoE();
             foreach (var sr in _celdasResaltadas)
             {
                 if (sr != null && _coloresOriginales.ContainsKey(sr))
@@ -729,8 +915,161 @@ namespace Felinaria.UI
             // ── Botón ATACAR ─────────────────────────────────────────────────
             _botonAtacar = CrearBoton("Btn_Atacar", "Atacar", ColorBotonAtacar, OnBotonAtacar);
 
+            // ── Botón MAGIA / HABILIDADES ────────────────────────────────────
+            _botonHabilidad = CrearBoton("Btn_Habilidad", "Magia / Skills", ColorBotonHabilidad, OnBotonHabilidad);
+
             // ── Botón ESPERAR ────────────────────────────────────────────────
             _botonEsperar = CrearBoton("Btn_Esperar", "Esperar", ColorBotonEsperar, OnBotonEsperar);
+        }
+
+        /// <summary>
+        /// Crea el panel contenedor del submenú de habilidades.
+        /// </summary>
+        private void CrearSkillMenuUI()
+        {
+            if (CanvasPrincipal == null) return;
+
+            if (_panelSkillMenu != null)
+                Destroy(_panelSkillMenu);
+
+            _panelSkillMenu = new GameObject("Panel_SkillMenu");
+            _panelSkillMenu.transform.SetParent(CanvasPrincipal.transform, false);
+            _panelSkillMenu.transform.localScale = Vector3.one;
+
+            var panelImg = _panelSkillMenu.AddComponent<Image>();
+            panelImg.color = new Color(0.08f, 0.08f, 0.14f, 0.96f);
+
+            var rectPanel = _panelSkillMenu.GetComponent<RectTransform>();
+            rectPanel.pivot = new Vector2(0f, 0.5f);
+            rectPanel.sizeDelta = new Vector2(AnchoBoton + 50f, 260f);
+
+            var layout = _panelSkillMenu.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(12, 12, 12, 12);
+            layout.spacing = EspaciadoBoton;
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            var fitter = _panelSkillMenu.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fitter.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
+        }
+
+        /// <summary>
+        /// Reconstruye dinámicamente los botones de habilidades según el maná y cooldowns de la unidad seleccionada.
+        /// </summary>
+        private void ReconstruirBotonesSkills()
+        {
+            if (_panelSkillMenu == null || UnidadSeleccionada == null) return;
+
+            // Limpiar botones anteriores
+            foreach (Transform hijo in _panelSkillMenu.transform)
+            {
+                Destroy(hijo.gameObject);
+            }
+
+            var habilidades = UnidadSeleccionada.Habilidades;
+            if (habilidades != null)
+            {
+                foreach (var skill in habilidades)
+                {
+                    if (skill == null) continue;
+
+                    var skillLocal = skill;
+                    int cd = UnidadSeleccionada.ObtenerCooldown(skillLocal);
+                    bool tieneMana = UnidadSeleccionada.ManaActual >= skillLocal.CostoMana;
+                    bool disponible = cd == 0 && tieneMana;
+
+                    string etiqueta = skillLocal.NombreHabilidad;
+                    if (cd > 0)
+                        etiqueta += $" (CD: {cd})";
+                    else if (!tieneMana)
+                        etiqueta += $" ({skillLocal.CostoMana} MP - Sin Maná)";
+                    else
+                        etiqueta += $" ({skillLocal.CostoMana} MP)";
+
+                    Color colorBtn = disponible
+                        ? skillLocal.ColorEfecto
+                        : new Color(0.35f, 0.35f, 0.4f, 0.8f);
+
+                    var btn = CrearBotonSkill(
+                        _panelSkillMenu.transform,
+                        $"Btn_{skillLocal.IdHabilidad}",
+                        etiqueta,
+                        colorBtn,
+                        disponible,
+                        () => OnSeleccionarSkill(skillLocal)
+                    );
+                }
+            }
+
+            // Botón Volver al menú principal
+            CrearBotonSkill(
+                _panelSkillMenu.transform,
+                "Btn_Volver",
+                "⬅ Volver",
+                new Color(0.45f, 0.45f, 0.5f, 1f),
+                true,
+                () => MostrarMenu()
+            );
+        }
+
+        private Button CrearBotonSkill(Transform padre, string nombre, string texto, Color colorFondo, bool interactable, UnityEngine.Events.UnityAction callback)
+        {
+            var btnObj = new GameObject(nombre);
+            btnObj.transform.SetParent(padre, false);
+            btnObj.transform.localScale = Vector3.one;
+
+            var layoutElement = btnObj.AddComponent<LayoutElement>();
+            layoutElement.minWidth = AnchoBoton + 35f;
+            layoutElement.preferredWidth = AnchoBoton + 35f;
+            layoutElement.minHeight = AltoBoton;
+            layoutElement.preferredHeight = AltoBoton;
+            layoutElement.flexibleWidth = 1f;
+            layoutElement.flexibleHeight = 0f;
+
+            var imgBtn = btnObj.AddComponent<Image>();
+            imgBtn.color = colorFondo;
+
+            var btn = btnObj.AddComponent<Button>();
+            btn.targetGraphic = imgBtn;
+            btn.interactable = interactable;
+
+            var colores = btn.colors;
+            colores.normalColor      = colorFondo;
+            colores.highlightedColor = Color.Lerp(colorFondo, Color.white, 0.35f);
+            colores.pressedColor     = Color.Lerp(colorFondo, Color.black, 0.35f);
+            colores.disabledColor    = new Color(colorFondo.r * 0.4f, colorFondo.g * 0.4f, colorFondo.b * 0.4f, 0.5f);
+            btn.colors = colores;
+            btn.onClick.AddListener(callback);
+
+            var rectBtn = btnObj.GetComponent<RectTransform>();
+            rectBtn.sizeDelta = new Vector2(AnchoBoton + 35f, AltoBoton);
+
+            var txtObj = new GameObject("Texto");
+            txtObj.transform.SetParent(btnObj.transform, false);
+            txtObj.transform.localScale = Vector3.one;
+
+            var txtComponent = txtObj.AddComponent<Text>();
+            txtComponent.text = texto;
+            txtComponent.color = interactable ? ColorTexto : new Color(0.7f, 0.7f, 0.7f, 0.7f);
+            txtComponent.font = ObtenerFuenteSegura();
+            txtComponent.fontSize = 16;
+            txtComponent.alignment = TextAnchor.MiddleCenter;
+            txtComponent.fontStyle = FontStyle.Bold;
+            txtComponent.raycastTarget = false;
+            txtComponent.horizontalOverflow = HorizontalWrapMode.Wrap;
+            txtComponent.verticalOverflow = VerticalWrapMode.Overflow;
+
+            var rectTxt = txtObj.GetComponent<RectTransform>();
+            rectTxt.anchorMin = Vector2.zero;
+            rectTxt.anchorMax = Vector2.one;
+            rectTxt.offsetMin = new Vector2(6f, 2f);
+            rectTxt.offsetMax = new Vector2(-6f, -2f);
+
+            return btn;
         }
 
         /// <summary>
@@ -823,9 +1162,15 @@ namespace Felinaria.UI
             return fuente;
         }
 
-        // ── Escape para cancelar ───────────────────────────────────────────────
+        // ── Escape para cancelar y actualización de hover AoE ──────────────────
         private void LateUpdate()
         {
+            // Previsualización dinámica de área AoE
+            if (ModoActual == ModoInteraccion.EsperandoObjetivoSkill)
+            {
+                ActualizarPreviewAoE();
+            }
+
             // Permitir cancelar cualquier modo con Escape
             if (Input.GetKeyDown(KeyCode.Escape))
             {

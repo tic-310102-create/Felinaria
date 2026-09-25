@@ -208,6 +208,8 @@ namespace Felinaria.Data
                             datosU.Fila,
                             datosU.VidaActual,
                             datosU.VidaMaxima,
+                            datosU.ManaActual,
+                            datosU.ManaMaximo,
                             datosU.YaActuoEsteTurno,
                             datosU.EstaViva
                         );
@@ -364,6 +366,8 @@ namespace Felinaria.Data
                 NombreFichaStats  = unidad.FichaStats != null ? unidad.FichaStats.name : "",
                 VidaActual        = unidad.VidaActual,
                 VidaMaxima        = unidad.VidaMaxima,
+                ManaActual        = unidad.ManaActual,
+                ManaMaximo        = unidad.ManaMaximo,
                 Ataque            = unidad.Ataque,
                 Defensa           = unidad.Defensa,
                 RangoMovimiento   = unidad.RangoMovimiento,

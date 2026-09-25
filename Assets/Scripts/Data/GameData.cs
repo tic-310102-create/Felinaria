@@ -60,6 +60,12 @@ namespace Felinaria.Data
         /// <summary>Vida máxima de la unidad.</summary>
         public int VidaMaxima;
 
+        /// <summary>Maná actual de la unidad al momento de guardar.</summary>
+        public int ManaActual;
+
+        /// <summary>Maná máximo de la unidad.</summary>
+        public int ManaMaximo;
+
         /// <summary>Ataque actual (puede haber sido modificado por buffs).</summary>
         public int Ataque;
 

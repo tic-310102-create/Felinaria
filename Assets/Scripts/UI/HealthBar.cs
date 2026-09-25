@@ -1,20 +1,13 @@
 // ============================================================
 //  HealthBar.cs
 //  Felinaria: El último presagio
-//  Fase 2 – Combate y Stats
+//  Fase 6 – Combate, Magia y Stats
 //
 //  RESPONSABILIDAD:
-//    - Muestra una barra de vida flotante sobre cada unidad.
-//    - Se actualiza automáticamente al suscribirse al evento
-//      OnAtaqueRealizado del CombatSystem.
+//    - Muestra una barra de vida (HP) y barra de maná (MP) flotante sobre cada unidad.
+//    - Se actualiza automáticamente con eventos de daño, curación y magia.
 //    - Usa un Canvas en modo "World Space" para flotar sobre la unidad.
-//    - Incluye animación suave de la barra y flash de daño.
-//
-//  CÓMO FUNCIONA (para principiantes):
-//    Este script se coloca en la MISMA unidad que tiene UnitController.
-//    Crea automáticamente un mini-Canvas con dos barras (fondo + relleno)
-//    que flotan sobre la cabeza del personaje.
-//    Cuando la unidad recibe daño, la barra se reduce suavemente.
+//    - Incluye animación suave de las barras y efecto ghost.
 // ============================================================
 
 using System.Collections;
@@ -26,8 +19,8 @@ using Felinaria.Combat;
 namespace Felinaria.UI
 {
     /// <summary>
-    /// Barra de vida flotante que se adjunta a cada unidad del tablero.
-    /// Se crea automáticamente desde código (no necesitas armar el Canvas manualmente).
+    /// Barra de vida y maná flotante que se adjunta a cada unidad del tablero.
+    /// Se crea automáticamente desde código en WorldSpace.
     /// </summary>
     [RequireComponent(typeof(UnitController))]
     public class HealthBar : MonoBehaviour
@@ -35,50 +28,44 @@ namespace Felinaria.UI
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("Posicionamiento")]
         [Tooltip("Desplazamiento vertical de la barra respecto al centro de la unidad.")]
-        public float OffsetY = 0.65f;
+        public float OffsetY = 0.68f;
 
         [Header("Dimensiones de la Barra")]
-        [Tooltip("Ancho total de la barra de vida.")]
-        public float AnchoBarra = 0.8f;
+        [Tooltip("Ancho total de las barras.")]
+        public float AnchoBarra = 0.85f;
 
-        [Tooltip("Alto total de la barra de vida.")]
-        public float AltoBarra = 0.1f;
+        [Tooltip("Alto total del contenedor de barras.")]
+        public float AltoBarra = 0.14f;
 
         [Header("Colores")]
-        [Tooltip("Color de la barra cuando la vida está llena.")]
         public Color ColorVidaAlta = new Color(0.2f, 0.85f, 0.2f, 1f);  // Verde
-
-        [Tooltip("Color de la barra cuando la vida está a la mitad.")]
         public Color ColorVidaMedia = new Color(1f, 0.85f, 0f, 1f);     // Amarillo
-
-        [Tooltip("Color de la barra cuando la vida está baja.")]
         public Color ColorVidaBaja = new Color(0.9f, 0.15f, 0.15f, 1f); // Rojo
-
-        [Tooltip("Color del fondo de la barra.")]
-        public Color ColorFondo = new Color(0.15f, 0.15f, 0.15f, 0.85f);
-
-        [Tooltip("Color de la barra de daño retardado (efecto ghost).")]
+        public Color ColorFondo = new Color(0.12f, 0.12f, 0.15f, 0.9f);
         public Color ColorDanioGhost = new Color(1f, 0.3f, 0.3f, 0.7f);
+        public Color ColorMana = new Color(0.2f, 0.65f, 1f, 1f);        // Azul maná
 
         [Header("Animación")]
-        [Tooltip("Velocidad de reducción suave de la barra (0-1 por segundo).")]
         [Range(0.5f, 5f)]
-        public float VelocidadAnimacion = 2f;
+        public float VelocidadAnimacion = 2.5f;
 
-        [Tooltip("Retardo antes de que la barra ghost comience a reducirse.")]
         [Range(0f, 1f)]
-        public float RetardoGhost = 0.4f;
+        public float RetardoGhost = 0.35f;
 
         // ── Referencias internas ───────────────────────────────────────────────
         private UnitController _unidad;
         private Canvas _canvas;
-        private Image _imagenFondo;
-        private Image _imagenGhost;    // Barra de "daño retardado" que sigue a la principal.
-        private Image _imagenRelleno;  // Barra principal (vida actual).
+        private Image _imagenFondoHP;
+        private Image _imagenGhostHP;
+        private Image _imagenRellenoHP;
+
+        private Image _imagenFondoMana;
+        private Image _imagenRellenoMana;
 
         // Valores de seguimiento para la animación.
-        private float _vidaObjetivoNormalizado;  // Hacia dónde va la barra principal.
-        private bool  _ghostEsperando;           // True durante el retardo del ghost.
+        private float _vidaObjetivoNormalizado = 1f;
+        private float _manaObjetivoNormalizado = 1f;
+        private bool  _ghostEsperando;
 
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
@@ -89,126 +76,150 @@ namespace Felinaria.UI
         private void Start()
         {
             CrearBarraVisual();
+            ActualizarBarra();
 
-            // Inicializar la barra al 100%.
-            _vidaObjetivoNormalizado = 1f;
-
-            // Suscribirse al evento de combate para actualizarse automáticamente.
             if (CombatSystem.Instancia != null)
             {
                 CombatSystem.Instancia.OnAtaqueRealizado += OnAtaqueRecibido;
+            }
+
+            if (SkillSystem.Instancia != null)
+            {
+                SkillSystem.Instancia.OnSkillEjecutada += OnSkillEjecutada;
             }
         }
 
         private void OnDestroy()
         {
-            // Desuscribirse para evitar errores cuando la unidad muere.
             if (CombatSystem.Instancia != null)
             {
                 CombatSystem.Instancia.OnAtaqueRealizado -= OnAtaqueRecibido;
+            }
+
+            if (SkillSystem.Instancia != null)
+            {
+                SkillSystem.Instancia.OnSkillEjecutada -= OnSkillEjecutada;
             }
         }
 
         private void LateUpdate()
         {
-            // Posicionar la barra sobre la unidad en cada frame.
             if (_canvas != null)
             {
                 _canvas.transform.position = transform.position + Vector3.up * OffsetY;
             }
 
-            // Animar la barra principal suavemente hacia el valor objetivo.
-            if (_imagenRelleno != null)
+            // Animar la barra de HP principal suavemente
+            if (_imagenRellenoHP != null)
             {
-                float valorActual = _imagenRelleno.fillAmount;
+                float valorActual = _imagenRellenoHP.fillAmount;
                 if (!Mathf.Approximately(valorActual, _vidaObjetivoNormalizado))
                 {
-                    _imagenRelleno.fillAmount = Mathf.MoveTowards(
+                    _imagenRellenoHP.fillAmount = Mathf.MoveTowards(
                         valorActual,
                         _vidaObjetivoNormalizado,
                         VelocidadAnimacion * Time.deltaTime
                     );
-                    // Actualizar color según porcentaje de vida.
-                    _imagenRelleno.color = ObtenerColorVida(_imagenRelleno.fillAmount);
+                    _imagenRellenoHP.color = ObtenerColorVida(_imagenRellenoHP.fillAmount);
                 }
             }
 
-            // Animar la barra ghost (se reduce después del retardo).
-            if (_imagenGhost != null && !_ghostEsperando)
+            // Animar la barra ghost de HP
+            if (_imagenGhostHP != null && !_ghostEsperando)
             {
-                float valorGhostActual = _imagenGhost.fillAmount;
+                float valorGhostActual = _imagenGhostHP.fillAmount;
                 if (!Mathf.Approximately(valorGhostActual, _vidaObjetivoNormalizado))
                 {
-                    _imagenGhost.fillAmount = Mathf.MoveTowards(
+                    _imagenGhostHP.fillAmount = Mathf.MoveTowards(
                         valorGhostActual,
                         _vidaObjetivoNormalizado,
-                        VelocidadAnimacion * 0.5f * Time.deltaTime
+                        VelocidadAnimacion * 0.6f * Time.deltaTime
+                    );
+                }
+            }
+
+            // Animar la barra de Maná suavemente
+            if (_imagenRellenoMana != null)
+            {
+                float valorActualMana = _imagenRellenoMana.fillAmount;
+                if (!Mathf.Approximately(valorActualMana, _manaObjetivoNormalizado))
+                {
+                    _imagenRellenoMana.fillAmount = Mathf.MoveTowards(
+                        valorActualMana,
+                        _manaObjetivoNormalizado,
+                        VelocidadAnimacion * 1.5f * Time.deltaTime
                     );
                 }
             }
         }
 
         // ── Creación visual ────────────────────────────────────────────────────
-        /// <summary>
-        /// Construye toda la jerarquía visual de la barra de vida por código.
-        /// No necesitas crear nada en el editor manualmente.
-        /// </summary>
         private void CrearBarraVisual()
         {
-            // ── 1. Canvas World Space ──────────────────────────────────────────
             var canvasObj = new GameObject("HealthBar_Canvas");
             canvasObj.transform.SetParent(transform);
             canvasObj.transform.localPosition = Vector3.up * OffsetY;
 
             _canvas = canvasObj.AddComponent<Canvas>();
             _canvas.renderMode = RenderMode.WorldSpace;
-            _canvas.sortingOrder = 10;  // Por encima de las celdas y unidades.
+            _canvas.sortingOrder = 10;
 
-            // Configurar tamaño del Canvas.
             var rectCanvas = canvasObj.GetComponent<RectTransform>();
             rectCanvas.sizeDelta = new Vector2(AnchoBarra, AltoBarra);
             rectCanvas.localScale = Vector3.one;
 
-            // ── 2. Imagen de Fondo ─────────────────────────────────────────────
-            _imagenFondo = CrearImagen("Fondo", canvasObj.transform, ColorFondo);
-            var rectFondo = _imagenFondo.GetComponent<RectTransform>();
-            ConfigurarRectTransformEstirado(rectFondo);
+            // ── 1. Contenedor Barra HP (parte superior 68%) ───────────────────
+            var hpContainer = new GameObject("HP_Container");
+            hpContainer.transform.SetParent(canvasObj.transform, false);
+            var rectHPContainer = hpContainer.AddComponent<RectTransform>();
+            rectHPContainer.anchorMin = new Vector2(0f, 0.38f);
+            rectHPContainer.anchorMax = new Vector2(1f, 1f);
+            rectHPContainer.offsetMin = Vector2.zero;
+            rectHPContainer.offsetMax = Vector2.zero;
 
-            // ── 3. Imagen Ghost (daño retardado) ──────────────────────────────
-            _imagenGhost = CrearImagen("Ghost", canvasObj.transform, ColorDanioGhost);
-            var rectGhost = _imagenGhost.GetComponent<RectTransform>();
-            ConfigurarRectTransformEstirado(rectGhost);
-            _imagenGhost.type = Image.Type.Filled;
-            _imagenGhost.fillMethod = Image.FillMethod.Horizontal;
-            _imagenGhost.fillAmount = 1f;
+            _imagenFondoHP = CrearImagen("FondoHP", hpContainer.transform, ColorFondo);
+            ConfigurarRectTransformEstirado(_imagenFondoHP.GetComponent<RectTransform>());
 
-            // ── 4. Imagen de Relleno (vida actual) ─────────────────────────────
-            _imagenRelleno = CrearImagen("Relleno", canvasObj.transform, ColorVidaAlta);
-            var rectRelleno = _imagenRelleno.GetComponent<RectTransform>();
-            ConfigurarRectTransformEstirado(rectRelleno);
-            _imagenRelleno.type = Image.Type.Filled;
-            _imagenRelleno.fillMethod = Image.FillMethod.Horizontal;
-            _imagenRelleno.fillAmount = 1f;
+            _imagenGhostHP = CrearImagen("GhostHP", hpContainer.transform, ColorDanioGhost);
+            ConfigurarRectTransformEstirado(_imagenGhostHP.GetComponent<RectTransform>());
+            _imagenGhostHP.type = Image.Type.Filled;
+            _imagenGhostHP.fillMethod = Image.FillMethod.Horizontal;
+            _imagenGhostHP.fillAmount = 1f;
+
+            _imagenRellenoHP = CrearImagen("RellenoHP", hpContainer.transform, ColorVidaAlta);
+            ConfigurarRectTransformEstirado(_imagenRellenoHP.GetComponent<RectTransform>());
+            _imagenRellenoHP.type = Image.Type.Filled;
+            _imagenRellenoHP.fillMethod = Image.FillMethod.Horizontal;
+            _imagenRellenoHP.fillAmount = 1f;
+
+            // ── 2. Contenedor Barra Maná (parte inferior 28%) ──────────────────
+            var manaContainer = new GameObject("Mana_Container");
+            manaContainer.transform.SetParent(canvasObj.transform, false);
+            var rectManaContainer = manaContainer.AddComponent<RectTransform>();
+            rectManaContainer.anchorMin = new Vector2(0f, 0f);
+            rectManaContainer.anchorMax = new Vector2(1f, 0.28f);
+            rectManaContainer.offsetMin = Vector2.zero;
+            rectManaContainer.offsetMax = Vector2.zero;
+
+            _imagenFondoMana = CrearImagen("FondoMana", manaContainer.transform, ColorFondo);
+            ConfigurarRectTransformEstirado(_imagenFondoMana.GetComponent<RectTransform>());
+
+            _imagenRellenoMana = CrearImagen("RellenoMana", manaContainer.transform, ColorMana);
+            ConfigurarRectTransformEstirado(_imagenRellenoMana.GetComponent<RectTransform>());
+            _imagenRellenoMana.type = Image.Type.Filled;
+            _imagenRellenoMana.fillMethod = Image.FillMethod.Horizontal;
+            _imagenRellenoMana.fillAmount = 1f;
         }
 
-        /// <summary>
-        /// Helper: crea un GameObject con Image (sprite blanco generado).
-        /// </summary>
         private Image CrearImagen(string nombre, Transform padre, Color color)
         {
             var obj = new GameObject(nombre);
             obj.transform.SetParent(padre, false);
-
             var img = obj.AddComponent<Image>();
             img.color = color;
-
             return img;
         }
 
-        /// <summary>
-        /// Configura un RectTransform para que ocupe todo el espacio del padre
-        /// (estilo "Stretch" en el editor).
-        /// </summary>
         private void ConfigurarRectTransformEstirado(RectTransform rect)
         {
             rect.anchorMin = Vector2.zero;
@@ -217,68 +228,55 @@ namespace Felinaria.UI
             rect.offsetMax = Vector2.zero;
         }
 
-        // ── Respuesta a eventos de combate ─────────────────────────────────────
-        /// <summary>
-        /// Callback del evento CombatSystem.OnAtaqueRealizado.
-        /// Solo reacciona si ESTA unidad fue el objetivo del ataque.
-        /// </summary>
+        // ── Callbacks de combate y magia ───────────────────────────────────────
         private void OnAtaqueRecibido(ResultadoCombate resultado)
         {
-            // Solo actualizar si esta unidad fue la que recibió daño.
             if (resultado.Objetivo != _unidad) return;
-
             ActualizarBarra();
         }
 
+        private void OnSkillEjecutada(ResultadoHabilidad resultado)
+        {
+            if (resultado.Lanzador == _unidad || (resultado.ObjetivosAfectados != null && resultado.ObjetivosAfectados.Contains(_unidad)))
+            {
+                ActualizarBarra();
+            }
+        }
+
         // ── API pública ────────────────────────────────────────────────────────
-        /// <summary>
-        /// Recalcula el valor objetivo de la barra según la vida actual.
-        /// Puede llamarse manualmente (ej: al curar).
-        /// </summary>
         public void ActualizarBarra()
         {
             if (_unidad == null) return;
 
-            float vidaMax = _unidad.VidaMaxima;
-            if (vidaMax <= 0) vidaMax = 1;  // Evitar división por cero.
+            float vidaMax = _unidad.VidaMaxima > 0 ? _unidad.VidaMaxima : 1;
+            _vidaObjetivoNormalizado = Mathf.Clamp01((float)_unidad.VidaActual / vidaMax);
 
-            _vidaObjetivoNormalizado = (float)_unidad.VidaActual / vidaMax;
+            float manaMax = _unidad.ManaMaximo > 0 ? _unidad.ManaMaximo : 1;
+            _manaObjetivoNormalizado = Mathf.Clamp01((float)_unidad.ManaActual / manaMax);
 
-            // Iniciar retardo del ghost.
             _ghostEsperando = true;
             StartCoroutine(RetardarGhost());
         }
 
-        /// <summary>
-        /// Espera el retardo configurado antes de que la barra ghost
-        /// empiece a reducirse.
-        /// </summary>
         private IEnumerator RetardarGhost()
         {
             yield return new WaitForSeconds(RetardoGhost);
             _ghostEsperando = false;
         }
 
-        // ── Utilidades de color ────────────────────────────────────────────────
-        /// <summary>
-        /// Interpola entre los 3 colores de vida según el porcentaje.
-        ///   100%-50% → Verde a Amarillo
-        ///   50%-0%   → Amarillo a Rojo
-        /// </summary>
         private Color ObtenerColorVida(float porcentaje)
         {
             if (porcentaje > 0.5f)
             {
-                // Interpolar de amarillo a verde.
                 float t = (porcentaje - 0.5f) / 0.5f;
                 return Color.Lerp(ColorVidaMedia, ColorVidaAlta, t);
             }
             else
             {
-                // Interpolar de rojo a amarillo.
                 float t = porcentaje / 0.5f;
                 return Color.Lerp(ColorVidaBaja, ColorVidaMedia, t);
             }
         }
     }
 }
+

@@ -48,10 +48,18 @@ namespace Felinaria.Data
         public Sprite Icono;
 
         // ── Estadísticas de Combate ────────────────────────────────────────────
-        [Header("Puntos de Vida")]
+        [Header("Puntos de Vida y Maná")]
         [Tooltip("Puntos de Vida máximos en nivel 1.")]
         [Range(1, 999)]
         public int VidaMaxima = 30;
+
+        [Tooltip("Puntos de Maná máximos para lanzar habilidades.")]
+        [Range(0, 999)]
+        public int ManaMaximo = 20;
+
+        [Header("Habilidades y Magia")]
+        [Tooltip("Lista de habilidades activas asignadas a este personaje.")]
+        public System.Collections.Generic.List<SkillData> Habilidades = new System.Collections.Generic.List<SkillData>();
 
         [Header("Ofensiva")]
         [Tooltip("Daño base de ataque físico.")]

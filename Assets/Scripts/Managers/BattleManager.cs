@@ -92,6 +92,11 @@ namespace Felinaria.Managers
                 CombatSystem.Instancia.OnAtaqueRealizado += OnAtaqueRealizado;
             }
 
+            if (SkillSystem.Instancia != null)
+            {
+                SkillSystem.Instancia.OnSkillEjecutada += OnSkillEjecutada;
+            }
+
             // Auto-instanciar UI de resultados de batalla
             _ = Felinaria.UI.BattleResultUI.Instancia;
         }
@@ -102,11 +107,16 @@ namespace Felinaria.Managers
             {
                 CombatSystem.Instancia.OnAtaqueRealizado -= OnAtaqueRealizado;
             }
+
+            if (SkillSystem.Instancia != null)
+            {
+                SkillSystem.Instancia.OnSkillEjecutada -= OnSkillEjecutada;
+            }
         }
 
         private bool _finalizandoBatalla = false;
 
-        // ── Monitoreo de Combate ───────────────────────────────────────────────
+        // ── Monitoreo de Combate y Magia ───────────────────────────────────────
         private void OnAtaqueRealizado(ResultadoCombate res)
         {
             if (EstadoActual != EstadoBatalla.EnProgreso) return;
@@ -122,6 +132,25 @@ namespace Felinaria.Managers
                     BajasEnemigas++;
                 else if (res.Objetivo != null && res.Objetivo.BandoUnidad == Bando.Jugador)
                     BajasAliadas++;
+            }
+
+            // Verificar condiciones de victoria o derrota
+            VerificarCondicionesFinDeBatalla();
+        }
+
+        private void OnSkillEjecutada(ResultadoHabilidad res)
+        {
+            if (EstadoActual != EstadoBatalla.EnProgreso) return;
+
+            if (res.Lanzador != null && res.Lanzador.BandoUnidad == Bando.Jugador && res.ValoresAplicados != null)
+            {
+                foreach (var v in res.ValoresAplicados)
+                {
+                    if (res.Habilidad.Tipo != Felinaria.Data.TipoHabilidad.Curacion)
+                    {
+                        DanioTotalInfligido += v;
+                    }
+                }
             }
 
             // Verificar condiciones de victoria o derrota
