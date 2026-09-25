@@ -650,6 +650,12 @@ namespace Felinaria.Units
             VidaActual = Mathf.Max(0, VidaActual - cantidad);
             Debug.Log($"[UnitController] '{NombreUnidad}' recibió {cantidad} de daño. Vida: {VidaActual}/{VidaMaxima}");
 
+            var hb = GetComponent<Felinaria.UI.HealthBar>();
+            if (hb != null)
+            {
+                hb.ActualizarBarra();
+            }
+
             if (VidaActual <= 0)
             {
                 Morir();

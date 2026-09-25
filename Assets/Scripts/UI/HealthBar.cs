@@ -4,23 +4,24 @@
 //  Fase 6 – Combate, Magia y Stats
 //
 //  RESPONSABILIDAD:
-//    - Muestra una barra de vida (HP) y barra de maná (MP) flotante sobre cada unidad.
-//    - Se actualiza automáticamente con eventos de daño, curación y magia.
-//    - Usa un Canvas en modo "World Space" para flotar sobre la unidad.
-//    - Incluye animación suave de las barras y efecto ghost.
+//    - Muestra barra de vida (HP) y barra de maná (MP) flotante sobre cada unidad en WorldSpace.
+//    - Muestra textos numéricos TextMeshPro: "HP: {actual}/{maximo}" y "MP: {actual}/{maximo}".
+//    - Actualización inmediata con daño, curación, magia y restauración de partida.
+//    - Animación suave de relleno y efecto ghost de daño.
 // ============================================================
 
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using Felinaria.Units;
 using Felinaria.Combat;
 
 namespace Felinaria.UI
 {
     /// <summary>
-    /// Barra de vida y maná flotante que se adjunta a cada unidad del tablero.
-    /// Se crea automáticamente desde código en WorldSpace.
+    /// Barra de vida y maná flotante que se adjunta a cada unidad del tablero en World Space.
+    /// Incluye etiquetas numéricas legibles TextMeshPro para HP y MP.
     /// </summary>
     [RequireComponent(typeof(UnitController))]
     public class HealthBar : MonoBehaviour
@@ -28,29 +29,32 @@ namespace Felinaria.UI
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("Posicionamiento")]
         [Tooltip("Desplazamiento vertical de la barra respecto al centro de la unidad.")]
-        public float OffsetY = 0.68f;
+        public float OffsetY = 0.72f;
 
-        [Header("Dimensiones de la Barra")]
-        [Tooltip("Ancho total de las barras.")]
-        public float AnchoBarra = 0.85f;
+        [Header("Dimensiones en Espacio de Mundo")]
+        [Tooltip("Ancho en píxeles del canvas.")]
+        public float AnchoCanvas = 100f;
 
-        [Tooltip("Alto total del contenedor de barras.")]
-        public float AltoBarra = 0.14f;
+        [Tooltip("Alto en píxeles del canvas.")]
+        public float AltoCanvas = 32f;
+
+        [Tooltip("Escala del canvas en el mundo.")]
+        public float EscalaMundo = 0.01f;
 
         [Header("Colores")]
         public Color ColorVidaAlta = new Color(0.2f, 0.85f, 0.2f, 1f);  // Verde
         public Color ColorVidaMedia = new Color(1f, 0.85f, 0f, 1f);     // Amarillo
         public Color ColorVidaBaja = new Color(0.9f, 0.15f, 0.15f, 1f); // Rojo
-        public Color ColorFondo = new Color(0.12f, 0.12f, 0.15f, 0.9f);
-        public Color ColorDanioGhost = new Color(1f, 0.3f, 0.3f, 0.7f);
-        public Color ColorMana = new Color(0.2f, 0.65f, 1f, 1f);        // Azul maná
+        public Color ColorFondo = new Color(0.1f, 0.1f, 0.14f, 0.92f);
+        public Color ColorDanioGhost = new Color(1f, 0.3f, 0.3f, 0.75f);
+        public Color ColorMana = new Color(0.18f, 0.65f, 1f, 1f);       // Azul maná
 
         [Header("Animación")]
         [Range(0.5f, 5f)]
-        public float VelocidadAnimacion = 2.5f;
+        public float VelocidadAnimacion = 3f;
 
         [Range(0f, 1f)]
-        public float RetardoGhost = 0.35f;
+        public float RetardoGhost = 0.3f;
 
         // ── Referencias internas ───────────────────────────────────────────────
         private UnitController _unidad;
@@ -58,9 +62,11 @@ namespace Felinaria.UI
         private Image _imagenFondoHP;
         private Image _imagenGhostHP;
         private Image _imagenRellenoHP;
+        private TextMeshProUGUI _textoHP;
 
         private Image _imagenFondoMana;
         private Image _imagenRellenoMana;
+        private TextMeshProUGUI _textoMana;
 
         // Valores de seguimiento para la animación.
         private float _vidaObjetivoNormalizado = 1f;
@@ -188,14 +194,14 @@ namespace Felinaria.UI
             _canvas.sortingOrder = 10;
 
             var rectCanvas = canvasObj.GetComponent<RectTransform>();
-            rectCanvas.sizeDelta = new Vector2(AnchoBarra, AltoBarra);
-            rectCanvas.localScale = Vector3.one;
+            rectCanvas.sizeDelta = new Vector2(AnchoCanvas, AltoCanvas);
+            rectCanvas.localScale = Vector3.one * EscalaMundo;
 
-            // ── 1. Contenedor Barra HP (parte superior 68%) ───────────────────
+            // ── 1. Contenedor Barra HP (parte superior) ───────────────────────
             var hpContainer = new GameObject("HP_Container");
             hpContainer.transform.SetParent(canvasObj.transform, false);
             var rectHPContainer = hpContainer.AddComponent<RectTransform>();
-            rectHPContainer.anchorMin = new Vector2(0f, 0.38f);
+            rectHPContainer.anchorMin = new Vector2(0f, 0.42f);
             rectHPContainer.anchorMax = new Vector2(1f, 1f);
             rectHPContainer.offsetMin = Vector2.zero;
             rectHPContainer.offsetMax = Vector2.zero;
@@ -216,12 +222,15 @@ namespace Felinaria.UI
             _imagenRellenoHP.fillAmount = _vidaObjetivoNormalizado;
             _imagenRellenoHP.color = ObtenerColorVida(_vidaObjetivoNormalizado);
 
-            // ── 2. Contenedor Barra Maná (parte inferior 28%) ──────────────────
+            // Texto numérico HP con TextMeshPro
+            _textoHP = CrearTextoTMP("TextoHP", hpContainer.transform, 12f, Color.white);
+
+            // ── 2. Contenedor Barra Maná (parte inferior) ──────────────────
             var manaContainer = new GameObject("Mana_Container");
             manaContainer.transform.SetParent(canvasObj.transform, false);
             var rectManaContainer = manaContainer.AddComponent<RectTransform>();
             rectManaContainer.anchorMin = new Vector2(0f, 0f);
-            rectManaContainer.anchorMax = new Vector2(1f, 0.28f);
+            rectManaContainer.anchorMax = new Vector2(1f, 0.36f);
             rectManaContainer.offsetMin = Vector2.zero;
             rectManaContainer.offsetMax = Vector2.zero;
 
@@ -233,6 +242,15 @@ namespace Felinaria.UI
             _imagenRellenoMana.type = Image.Type.Filled;
             _imagenRellenoMana.fillMethod = Image.FillMethod.Horizontal;
             _imagenRellenoMana.fillAmount = _manaObjetivoNormalizado;
+
+            // Texto numérico MP con TextMeshPro
+            _textoMana = CrearTextoTMP("TextoMana", manaContainer.transform, 8.5f, new Color(0.9f, 0.95f, 1f));
+
+            // Actualizar etiquetas numéricas iniciales
+            if (_unidad != null)
+            {
+                ActualizarTextos(_unidad.VidaActual, _unidad.VidaMaxima, _unidad.ManaActual, _unidad.ManaMaximo);
+            }
         }
 
         private Image CrearImagen(string nombre, Transform padre, Color color)
@@ -242,6 +260,31 @@ namespace Felinaria.UI
             var img = obj.AddComponent<Image>();
             img.color = color;
             return img;
+        }
+
+        private TextMeshProUGUI CrearTextoTMP(string nombre, Transform padre, float tamanioFuente, Color color)
+        {
+            var obj = new GameObject(nombre);
+            obj.transform.SetParent(padre, false);
+
+            var rect = obj.AddComponent<RectTransform>();
+            ConfigurarRectTransformEstirado(rect);
+
+            var tmp = obj.AddComponent<TextMeshProUGUI>();
+            tmp.text = "";
+            tmp.fontSize = tamanioFuente;
+            tmp.fontStyle = FontStyles.Bold;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.color = color;
+            tmp.enableAutoSizing = false;
+            tmp.raycastTarget = false;
+            tmp.extraPadding = true;
+
+            // Sombra/Outline nítido para máximo contraste
+            tmp.outlineWidth = 0.22f;
+            tmp.outlineColor = new Color32(0, 0, 0, 240);
+
+            return tmp;
         }
 
         private void ConfigurarRectTransformEstirado(RectTransform rect)
@@ -268,6 +311,9 @@ namespace Felinaria.UI
         }
 
         // ── API pública ────────────────────────────────────────────────────────
+        /// <summary>
+        /// Actualiza los rellenos visuales y los textos numéricos HP y MP de la barra.
+        /// </summary>
         public void ActualizarBarra()
         {
             if (_unidad == null) return;
@@ -276,11 +322,15 @@ namespace Felinaria.UI
                 CrearBarraVisual();
             }
 
-            float vidaMax = _unidad.VidaMaxima > 0 ? _unidad.VidaMaxima : 1;
-            _vidaObjetivoNormalizado = Mathf.Clamp01((float)_unidad.VidaActual / vidaMax);
+            int vidaAct = _unidad.VidaActual;
+            int vidaMax = _unidad.VidaMaxima > 0 ? _unidad.VidaMaxima : 1;
+            _vidaObjetivoNormalizado = Mathf.Clamp01((float)vidaAct / vidaMax);
 
-            float manaMax = _unidad.ManaMaximo > 0 ? _unidad.ManaMaximo : 1;
-            _manaObjetivoNormalizado = Mathf.Clamp01((float)_unidad.ManaActual / manaMax);
+            int manaAct = _unidad.ManaActual;
+            int manaMax = _unidad.ManaMaximo > 0 ? _unidad.ManaMaximo : 1;
+            _manaObjetivoNormalizado = Mathf.Clamp01((float)manaAct / manaMax);
+
+            ActualizarTextos(vidaAct, vidaMax, manaAct, manaMax);
 
             _ghostEsperando = true;
             if (gameObject.activeInHierarchy)
@@ -290,7 +340,7 @@ namespace Felinaria.UI
         }
 
         /// <summary>
-        /// Actualiza de forma inmediata y directa la barra de vida con los valores dados.
+        /// Actualiza de forma inmediata y directa la barra de vida y su texto con los valores dados.
         /// </summary>
         public void ActualizarVida(int vidaActual, int vidaMaximo)
         {
@@ -301,6 +351,7 @@ namespace Felinaria.UI
 
             if (vidaMaximo <= 0) vidaMaximo = 1;
             _vidaObjetivoNormalizado = Mathf.Clamp01((float)vidaActual / vidaMaximo);
+
             if (_imagenRellenoHP != null)
             {
                 _imagenRellenoHP.fillAmount = _vidaObjetivoNormalizado;
@@ -310,10 +361,14 @@ namespace Felinaria.UI
             {
                 _imagenGhostHP.fillAmount = _vidaObjetivoNormalizado;
             }
+
+            int manaAct = (_unidad != null) ? _unidad.ManaActual : 0;
+            int manaMax = (_unidad != null && _unidad.ManaMaximo > 0) ? _unidad.ManaMaximo : 1;
+            ActualizarTextos(vidaActual, vidaMaximo, manaAct, manaMax);
         }
 
         /// <summary>
-        /// Actualiza de forma inmediata y directa la barra de maná con los valores dados.
+        /// Actualiza de forma inmediata y directa la barra de maná y su texto con los valores dados.
         /// </summary>
         public void ActualizarMana(int manaActual, int manaMaximo)
         {
@@ -324,9 +379,27 @@ namespace Felinaria.UI
 
             if (manaMaximo <= 0) manaMaximo = 1;
             _manaObjetivoNormalizado = Mathf.Clamp01((float)manaActual / manaMaximo);
+
             if (_imagenRellenoMana != null)
             {
                 _imagenRellenoMana.fillAmount = _manaObjetivoNormalizado;
+            }
+
+            int vidaAct = (_unidad != null) ? _unidad.VidaActual : 0;
+            int vidaMax = (_unidad != null && _unidad.VidaMaxima > 0) ? _unidad.VidaMaxima : 1;
+            ActualizarTextos(vidaAct, vidaMax, manaActual, manaMaximo);
+        }
+
+        private void ActualizarTextos(int vidaActual, int vidaMaximo, int manaActual, int manaMaximo)
+        {
+            if (_textoHP != null)
+            {
+                _textoHP.text = $"HP: {vidaActual}/{vidaMaximo}";
+            }
+
+            if (_textoMana != null)
+            {
+                _textoMana.text = $"MP: {manaActual}/{manaMaximo}";
             }
         }
 
@@ -351,4 +424,3 @@ namespace Felinaria.UI
         }
     }
 }
-
