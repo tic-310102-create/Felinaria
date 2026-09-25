@@ -159,6 +159,18 @@ namespace Felinaria.Grid
             ConfigurarCamara2D();
         }
 
+        private bool _camaraConfigurada = false;
+
+        private void LateUpdate()
+        {
+            // Asegurar que la cámara quede configurada en el primer frame en Playmode
+            if (!_camaraConfigurada)
+            {
+                ConfigurarCamara2D();
+                _camaraConfigurada = true;
+            }
+        }
+
         // ── Configuración Cámara 2D ───────────────────────────────────────────
         /// <summary>
         /// Configura la cámara principal en modo Ortográfico 2D (sin perspectiva ni inclinación)
@@ -166,13 +178,12 @@ namespace Felinaria.Grid
         /// </summary>
         public void ConfigurarCamara2D()
         {
-            Camera cam = Camera.main;
-            if (cam == null) cam = FindFirstObjectByType<Camera>();
+            Camera cam = Camera.main ?? FindFirstObjectByType<Camera>();
             if (cam == null) return;
 
             // Modo 2D puro: proyección ortográfica y rotación frontal
             cam.orthographic = true;
-            cam.transform.rotation = Quaternion.identity;
+            cam.transform.rotation = Quaternion.Euler(0f, 0f, 0f);
 
             // Centrar cámara en el medio de la cuadrícula
             float centroX = OrigenMundo.x + (Columnas - 1) * TamanioCelda * 0.5f;
@@ -182,7 +193,8 @@ namespace Felinaria.Grid
             // Ajustar tamaño ortográfico con margen
             float margen = 1.2f;
             float altoRequerido = (Filas * TamanioCelda * 0.5f) + margen;
-            float anchoRequerido = ((Columnas * TamanioCelda * 0.5f) / Mathf.Max(0.1f, cam.aspect)) + margen;
+            float aspect = (cam.aspect > 0.05f) ? cam.aspect : (16f / 9f);
+            float anchoRequerido = ((Columnas * TamanioCelda * 0.5f) / aspect) + margen;
             cam.orthographicSize = Mathf.Max(altoRequerido, anchoRequerido, 5f);
         }
 
@@ -245,20 +257,43 @@ namespace Felinaria.Grid
 
             objeto.name = $"Celda_{col}_{row}";
 
-            // Asegurar BoxCollider2D en la celda para detección de clics 2D
-            if (objeto.GetComponent<Collider2D>() == null)
+            // 1. Destruir inmediatamente colisionadores 3D si existieran en el prefab
+            var colliders3D = objeto.GetComponentsInChildren<Collider>(true);
+            foreach (var col3D in colliders3D)
             {
-                var col2D = objeto.AddComponent<BoxCollider2D>();
+                DestroyImmediate(col3D);
+            }
+
+            // 2. Destruir MeshFilter y MeshRenderer 3D si existieran
+            var meshFilters = objeto.GetComponentsInChildren<MeshFilter>(true);
+            foreach (var mf in meshFilters) DestroyImmediate(mf);
+            var meshRenderers = objeto.GetComponentsInChildren<MeshRenderer>(true);
+            foreach (var mr in meshRenderers) DestroyImmediate(mr);
+
+            // 3. Asegurar BoxCollider2D en la celda para detección de clics 2D
+            var col2D = objeto.GetComponent<BoxCollider2D>();
+            if (col2D == null)
+            {
+                col2D = objeto.AddComponent<BoxCollider2D>();
+            }
+            if (col2D != null)
+            {
                 col2D.size = Vector2.one * TamanioCelda;
                 col2D.isTrigger = true;
             }
 
-            // Aplicar color tipo tablero de ajedrez.
+            // 4. Asegurar SpriteRenderer 2D
             var sr = objeto.GetComponent<SpriteRenderer>();
-            if (sr != null)
+            if (sr == null)
             {
-                sr.color = ((col + row) % 2 == 0) ? ColorCeldaPar : ColorCeldaImpar;
+                sr = objeto.AddComponent<SpriteRenderer>();
+                sr.sprite = ObtenerSpriteBlanco();
+                sr.sortingLayerName = "Default";
+                sr.sortingOrder = 0;
             }
+
+            // Aplicar color tipo tablero de ajedrez.
+            sr.color = ((col + row) % 2 == 0) ? ColorCeldaPar : ColorCeldaImpar;
 
             // Registrar en el diccionario.
             var clave = new Vector2Int(col, row);
@@ -279,7 +314,7 @@ namespace Felinaria.Grid
             obj.transform.localScale = Vector3.one * (TamanioCelda * 0.95f);
 
             var sr = obj.AddComponent<SpriteRenderer>();
-            sr.sprite = GetSpriteBlanco();
+            sr.sprite = ObtenerSpriteBlanco();
             sr.sortingLayerName = "Default";
             sr.sortingOrder = 0;
 
@@ -293,9 +328,9 @@ namespace Felinaria.Grid
         private static Sprite _spriteBlancoCache;
 
         /// <summary>
-        /// Devuelve un sprite blanco cuadrado 2D reutilizable.
+        /// Devuelve un sprite blanco cuadrado 2D estático reutilizable.
         /// </summary>
-        public Sprite GetSpriteBlanco()
+        public static Sprite ObtenerSpriteBlanco()
         {
             if (_spriteBlancoCache != null) return _spriteBlancoCache;
 
@@ -306,6 +341,11 @@ namespace Felinaria.Grid
             _spriteBlancoCache = Sprite.Create(tex, new Rect(0, 0, 2, 2), new Vector2(0.5f, 0.5f), 2f);
             return _spriteBlancoCache;
         }
+
+        /// <summary>
+        /// Wrapper de instancia para compatibilidad hacia atrás.
+        /// </summary>
+        public Sprite GetSpriteBlanco() => ObtenerSpriteBlanco();
 
         /// <summary>
         /// Destruye todos los objetos de celda y limpia el diccionario.

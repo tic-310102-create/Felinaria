@@ -177,40 +177,49 @@ namespace Felinaria.Units
         /// </summary>
         private void AsegurarComponentes2D()
         {
-            // 1. Limpiar colisionadores 3D si existieran en la unidad
+            // 1. Destruir de inmediato cualquier colisionador 3D (para evitar conflicto con BoxCollider2D)
             var colliders3D = GetComponents<Collider>();
             foreach (var col3D in colliders3D)
             {
-                if (Application.isPlaying)
-                    Destroy(col3D);
-                else
-                    DestroyImmediate(col3D);
+                DestroyImmediate(col3D);
             }
 
-            // 2. Asegurar BoxCollider2D para detección de clics 2D
-            if (GetComponent<Collider2D>() == null)
+            // 2. Destruir MeshFilter y MeshRenderer 3D si existieran
+            var meshFilters = GetComponents<MeshFilter>();
+            foreach (var mf in meshFilters)
             {
-                var col2D = gameObject.AddComponent<BoxCollider2D>();
+                DestroyImmediate(mf);
+            }
+            var meshRenderers = GetComponents<MeshRenderer>();
+            foreach (var mr in meshRenderers)
+            {
+                DestroyImmediate(mr);
+            }
+
+            // 3. Asegurar BoxCollider2D para detección de clics 2D
+            var col2D = GetComponent<BoxCollider2D>();
+            if (col2D == null)
+            {
+                col2D = gameObject.AddComponent<BoxCollider2D>();
+            }
+            if (col2D != null)
+            {
                 col2D.size = new Vector2(0.85f, 0.85f);
                 col2D.isTrigger = false;
             }
 
-            // 3. Asegurar SpriteRenderer para renderizado 2D
+            // 4. Asegurar SpriteRenderer para renderizado 2D
             _spriteRenderer = GetComponent<SpriteRenderer>();
             if (_spriteRenderer == null)
             {
-                // Desactivar renderers 3D si hubiera mallas 3D
-                var mr = GetComponent<MeshRenderer>();
-                if (mr != null) mr.enabled = false;
-
                 _spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
                 _spriteRenderer.sortingLayerName = "Default";
                 _spriteRenderer.sortingOrder = 2; // Por encima del tablero (order 0)
             }
 
-            if (_spriteRenderer.sprite == null && GridManager.Instancia != null)
+            if (_spriteRenderer != null && _spriteRenderer.sprite == null)
             {
-                _spriteRenderer.sprite = GridManager.Instancia.GetSpriteBlanco();
+                _spriteRenderer.sprite = GridManager.ObtenerSpriteBlanco();
             }
 
             // Aplicar color inicial del bando si no hay color previo
