@@ -1,25 +1,28 @@
 // ============================================================
 //  UnitController.cs
 //  Felinaria: El último presagio
-//  Fase 1 – Prototipo Graybox
+//  Fase 2 – Combate y Stats (actualizado)
 //
 //  RESPONSABILIDAD:
 //    - Representa a cualquier unidad en el tablero (héroe o enemigo).
-//    - Almacena estadísticas básicas configurables desde el Inspector.
+//    - Lee sus estadísticas desde un ScriptableObject UnitStats (Fase 2).
 //    - Mueve a la unidad entre celdas con interpolación suave (sin teletransporte).
 //    - Comunica su posición al GridManager para actualizar el mapa de ocupación.
 //    - Respeta el turno activo (pregunta al TurnManager antes de actuar).
+//    - Expone API para CombatSystem y ActionMenu.
 //
-//  CÓMO FUNCIONA (resumen para principiantes):
-//    Cada personaje tiene este script. Cuando quieres moverlo,
-//    llamas a MoverACelda(col, fila) y el script se desliza suavemente
-//    hasta allí usando MoveTowards, sin saltar bruscamente.
+//  CAMBIOS FASE 2:
+//    - Se lee de UnitStats (ScriptableObject) en vez de valores hardcodeados.
+//    - Se expone MarcarComoUsadaPublico() para CombatSystem.
+//    - Se agregan propiedades de rango de ataque.
+//    - Se agrega Collider2D automático para detección de clics.
 // ============================================================
 
 using System.Collections;
 using UnityEngine;
 using Felinaria.Grid;
 using Felinaria.Managers;
+using Felinaria.Data;
 
 namespace Felinaria.Units
 {
@@ -36,8 +39,14 @@ namespace Felinaria.Units
     /// </summary>
     public class UnitController : MonoBehaviour
     {
+        // ── Inspector: ScriptableObject de stats (Fase 2) ─────────────────────
+        [Header("Ficha de Estadísticas (ScriptableObject)")]
+        [Tooltip("Arrastra aquí el archivo UnitStats del personaje. " +
+                 "Si está asignado, sobreescribe los valores manuales de abajo.")]
+        public UnitStats FichaStats;
+
         // ── Inspector: Identidad ───────────────────────────────────────────────
-        [Header("Identidad de la Unidad")]
+        [Header("Identidad de la Unidad (manual si no hay FichaStats)")]
         [Tooltip("Nombre del personaje (p.ej. 'Sera', 'Guardia Enemigo').")]
         public string NombreUnidad = "Unidad";
 
@@ -52,8 +61,8 @@ namespace Felinaria.Units
         [Tooltip("Fila de inicio (eje Y del tablero).")]
         public int FilaInicial = 0;
 
-        // ── Inspector: Estadísticas de combate ────────────────────────────────
-        [Header("Estadísticas de Combate")]
+        // ── Inspector: Estadísticas de combate (fallback manual) ──────────────
+        [Header("Estadísticas de Combate (fallback si no hay FichaStats)")]
         [Tooltip("Puntos de Vida máximos.")]
         [Range(1, 999)]
         public int VidaMaxima = 30;
@@ -69,6 +78,14 @@ namespace Felinaria.Units
         [Tooltip("Rango de movimiento en celdas por turno.")]
         [Range(1, 10)]
         public int RangoMovimiento = 3;
+
+        [Tooltip("Rango mínimo de ataque (celdas Manhattan).")]
+        [Range(1, 5)]
+        public int RangoAtaqueMinimo = 1;
+
+        [Tooltip("Rango máximo de ataque (celdas Manhattan).")]
+        [Range(1, 5)]
+        public int RangoAtaqueMaximo = 1;
 
         // ── Inspector: Movimiento ──────────────────────────────────────────────
         [Header("Configuración de Movimiento")]
@@ -106,13 +123,62 @@ namespace Felinaria.Units
         private void Awake()
         {
             _spriteRenderer = GetComponent<SpriteRenderer>();
+
+            // Cargar stats desde ScriptableObject si está asignado.
+            CargarDesdeScriptableObject();
+
             VidaActual = VidaMaxima;
+
+            // Asegurar que la unidad tiene un Collider2D para detección de clics.
+            AsegurarCollider();
         }
 
         private void Start()
         {
             // Posicionar la unidad en su celda inicial al comenzar la escena.
             InicializarEnCuadricula();
+        }
+
+        // ── Carga desde ScriptableObject ──────────────────────────────────────
+        /// <summary>
+        /// Si FichaStats está asignada, sobreescribe los valores manuales
+        /// con los del ScriptableObject. Esto permite a los diseñadores
+        /// modificar stats sin tocar el Inspector de cada unidad individual.
+        /// </summary>
+        private void CargarDesdeScriptableObject()
+        {
+            if (FichaStats == null) return;
+
+            NombreUnidad      = FichaStats.NombrePersonaje;
+            VidaMaxima        = FichaStats.VidaMaxima;
+            Ataque            = FichaStats.Ataque;
+            Defensa           = FichaStats.Defensa;
+            RangoMovimiento   = FichaStats.RangoMovimiento;
+            VelocidadMovimiento = FichaStats.VelocidadMovimiento;
+            RangoAtaqueMinimo = FichaStats.RangoAtaqueMinimo;
+            RangoAtaqueMaximo = FichaStats.RangoAtaqueMaximo;
+            ColorNormal       = FichaStats.ColorGraybox;
+            ColorUsado        = FichaStats.ColorUsado;
+
+            // Aplicar color graybox inmediatamente.
+            if (_spriteRenderer != null)
+                _spriteRenderer.color = ColorNormal;
+
+            Debug.Log($"[UnitController] Stats cargados desde ScriptableObject: '{FichaStats.NombrePersonaje}'");
+        }
+
+        /// <summary>
+        /// Asegura que la unidad tenga un Collider2D para que
+        /// el ActionMenu pueda detectar clics con Physics2D.Raycast.
+        /// </summary>
+        private void AsegurarCollider()
+        {
+            if (GetComponent<Collider2D>() == null)
+            {
+                var col = gameObject.AddComponent<BoxCollider2D>();
+                col.size = Vector2.one * 0.8f;  // Ligeramente menor que la celda.
+                Debug.Log($"[UnitController] '{NombreUnidad}': BoxCollider2D añadido automáticamente.");
+            }
         }
 
         // ── Inicialización ─────────────────────────────────────────────────────
@@ -259,6 +325,15 @@ namespace Felinaria.Units
         }
 
         /// <summary>
+        /// Versión pública de MarcarComoUsada().
+        /// Llamada por CombatSystem al atacar o por ActionMenu al "Esperar".
+        /// </summary>
+        public void MarcarComoUsadaPublico()
+        {
+            MarcarComoUsada();
+        }
+
+        /// <summary>
         /// Reinicia el estado de la unidad al comienzo de un nuevo turno.
         /// Llamado por TurnManager al cambiar de turno.
         /// </summary>
@@ -269,10 +344,9 @@ namespace Felinaria.Units
                 _spriteRenderer.color = ColorNormal;
         }
 
-        // ── Combate (stub para Fase 2) ─────────────────────────────────────────
+        // ── Combate ────────────────────────────────────────────────────────────
         /// <summary>
         /// Aplica daño a la unidad. Si la vida llega a 0, la elimina.
-        /// (Implementación completa en Fase 2.)
         /// </summary>
         public void RecibirDanio(int cantidad)
         {
@@ -292,7 +366,6 @@ namespace Felinaria.Units
         {
             Debug.Log($"[UnitController] '{NombreUnidad}' ha sido derrotado.");
             GridManager.Instancia.SetOcupacion(Coordenada.x, Coordenada.y, false);
-            // TODO Fase 2: animación de muerte, eventos, drops.
             Destroy(gameObject);
         }
 
