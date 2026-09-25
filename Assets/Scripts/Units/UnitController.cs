@@ -100,10 +100,14 @@ namespace Felinaria.Units
         [Range(1f, 20f)]
         public float VelocidadMovimiento = 6f;
 
-        [Tooltip("Color del sprite cuando la unidad ya actuó este turno.")]
-        public Color ColorUsado = new Color(0.5f, 0.5f, 0.5f, 1f);
+        [Header("Representación Visual 2D")]
+        [Tooltip("Referencia al SpriteRenderer asignado en el Inspector. Si está vacío, se busca automáticamente.")]
+        public SpriteRenderer ComponenteSpriteRenderer;
 
-        [Tooltip("Color normal del sprite.")]
+        [Tooltip("Color del sprite cuando la unidad ya actuó este turno (atenuación).")]
+        public Color ColorUsado = new Color(0.6f, 0.6f, 0.6f, 1f);
+
+        [Tooltip("Color normal base del sprite (blanco #FFFFFF para respetar los píxeles del arte original).")]
         public Color ColorNormal = Color.white;
 
         // ── Estado interno ─────────────────────────────────────────────────────
@@ -125,7 +129,7 @@ namespace Felinaria.Units
         /// <summary>True si esta unidad ya actuó en el turno actual.</summary>
         public bool YaActuoEsteTurno { get; private set; }
 
-        // Referencia al SpriteRenderer o MeshRenderer 3D para cambiar colores.
+        // Referencia al SpriteRenderer para cambiar colores.
         private SpriteRenderer _spriteRenderer;
         private Renderer _meshRenderer;
 
@@ -147,7 +151,7 @@ namespace Felinaria.Units
                 Habilidades = Felinaria.Combat.SkillSystem.ObtenerHabilidadesPredeterminadas();
             }
 
-            // Asegurar componentes 2D puros (SpriteRenderer, BoxCollider2D, Z=0)
+            // Asegurar componentes 2D puros respetando el sprite original
             AsegurarComponentes2D();
 
             // Auto-adjuntar HealthBar flotante si no existe
@@ -182,7 +186,15 @@ namespace Felinaria.Units
             VelocidadMovimiento = FichaStats.VelocidadMovimiento;
             RangoAtaqueMinimo = FichaStats.RangoAtaqueMinimo;
             RangoAtaqueMaximo = FichaStats.RangoAtaqueMaximo;
-            ColorNormal       = FichaStats.ColorGraybox;
+
+            if (FichaStats.ColorGraybox != Color.white && FichaStats.ColorGraybox.a > 0.05f)
+            {
+                ColorNormal = FichaStats.ColorGraybox;
+            }
+            else
+            {
+                ColorNormal = Color.white;
+            }
             ColorUsado        = FichaStats.ColorUsado;
 
             if (FichaStats.Habilidades != null && FichaStats.Habilidades.Count > 0)
@@ -190,7 +202,7 @@ namespace Felinaria.Units
                 Habilidades = new System.Collections.Generic.List<Felinaria.Data.SkillData>(FichaStats.Habilidades);
             }
 
-            // Aplicar color graybox inmediatamente.
+            // Aplicar color base inmediatamente
             AplicarColorVisual(ColorNormal);
 
             Debug.Log($"[UnitController] Stats cargados desde ScriptableObject: '{FichaStats.NombrePersonaje}'");
@@ -198,18 +210,18 @@ namespace Felinaria.Units
 
         /// <summary>
         /// Asegura que la unidad utilice componentes 2D puros (BoxCollider2D y SpriteRenderer)
-        /// y elimina colisionadores o mallas 3D para evitar interferencias.
+        /// y respete el sprite asignado en el Inspector sin forzar sprites o colores planos.
         /// </summary>
         private void AsegurarComponentes2D()
         {
-            // 1. Destruir de inmediato cualquier colisionador 3D (para evitar conflicto con BoxCollider2D)
+            // 1. Destruir cualquier colisionador 3D residual para evitar interferencias
             var colliders3D = GetComponents<Collider>();
             foreach (var col3D in colliders3D)
             {
                 DestroyImmediate(col3D);
             }
 
-            // 2. Destruir MeshFilter y MeshRenderer 3D si existieran
+            // 2. Destruir MeshFilter y MeshRenderer 3D residuales
             var meshFilters = GetComponents<MeshFilter>();
             foreach (var mf in meshFilters)
             {
@@ -233,26 +245,33 @@ namespace Felinaria.Units
                 col2D.isTrigger = false;
             }
 
-            // 4. Asegurar SpriteRenderer para renderizado 2D
-            _spriteRenderer = GetComponent<SpriteRenderer>();
-            if (_spriteRenderer == null)
+            // 4. Vincular SpriteRenderer respetando el componente o sprite configurado en el Inspector
+            if (ComponenteSpriteRenderer != null)
             {
-                _spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
-                _spriteRenderer.sortingLayerName = "Default";
-                _spriteRenderer.sortingOrder = 2; // Por encima del tablero (order 0)
+                _spriteRenderer = ComponenteSpriteRenderer;
+            }
+            else
+            {
+                _spriteRenderer = GetComponent<SpriteRenderer>() ?? GetComponentInChildren<SpriteRenderer>();
+                if (_spriteRenderer == null)
+                {
+                    _spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
+                    _spriteRenderer.sortingLayerName = "Default";
+                    _spriteRenderer.sortingOrder = 2; // Por encima del tablero
+                }
             }
 
+            // Si el SpriteRenderer no tiene ningún sprite asignado, usar el blanco de respaldo para Graybox
             if (_spriteRenderer != null && _spriteRenderer.sprite == null)
             {
                 _spriteRenderer.sprite = GridManager.ObtenerSpriteBlanco();
             }
 
-            // Aplicar color inicial del bando si no hay color previo
-            Color colorBando = (BandoUnidad == Bando.Jugador)
-                ? new Color(0.2f, 0.5f, 1f, 1f)
-                : new Color(1f, 0.25f, 0.25f, 1f);
-
-            AplicarColorVisual(ColorNormal != Color.white ? ColorNormal : colorBando);
+            // Respetar #FFFFFF como color base por defecto para no tapar los píxeles del sprite
+            if (_spriteRenderer != null)
+            {
+                _spriteRenderer.color = ColorNormal;
+            }
 
             // Garantizar plano Z = 0
             transform.position = new Vector3(transform.position.x, transform.position.y, 0f);

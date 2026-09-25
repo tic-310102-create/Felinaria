@@ -194,8 +194,8 @@ namespace Felinaria.Grid
             b1.Terrenos.Add(new DatosTerrenoMapa(5, 0, TipoTerreno.ObstaculoAgua));
 
             // Spawns Batalla 1: 1 Jugador, 1 Enemigo
-            b1.Spawns.Add(new DatosSpawnUnidad("Capitán Rastrojo", Bando.Jugador, 1, 2, 30, 20, 8, 3, 3, new Color(0.2f, 0.6f, 1f, 1f)));
-            b1.Spawns.Add(new DatosSpawnUnidad("Rata de Sombra", Bando.Enemigo, 6, 3, 20, 10, 6, 2, 3, new Color(1f, 0.25f, 0.25f, 1f)));
+            b1.Spawns.Add(new DatosSpawnUnidad("Capitán Rastrojo", Bando.Jugador, 1, 2, 30, 20, 8, 3, 3, Color.white));
+            b1.Spawns.Add(new DatosSpawnUnidad("Rata de Sombra", Bando.Enemigo, 6, 3, 20, 10, 6, 2, 3, Color.white));
 
             _batallasPredefinidas[1] = b1;
 
@@ -233,16 +233,16 @@ namespace Felinaria.Grid
             b2.Terrenos.Add(new DatosTerrenoMapa(6, 6, TipoTerreno.CoberturaBosque));
 
             // Spawns Batalla 2: 1 Héroe y 2 Enemigos tácticos
-            b2.Spawns.Add(new DatosSpawnUnidad("Capitán Rastrojo", Bando.Jugador, 1, 1, 30, 20, 8, 3, 3, new Color(0.2f, 0.6f, 1f, 1f)));
-            b2.Spawns.Add(new DatosSpawnUnidad("Rata de Sombra Alfa", Bando.Enemigo, 7, 6, 25, 15, 7, 3, 3, new Color(0.95f, 0.15f, 0.15f, 1f)));
-            b2.Spawns.Add(new DatosSpawnUnidad("Rata de Sombra Exploradora", Bando.Enemigo, 7, 2, 18, 10, 6, 1, 4, new Color(1f, 0.4f, 0.2f, 1f)));
+            b2.Spawns.Add(new DatosSpawnUnidad("Capitán Rastrojo", Bando.Jugador, 1, 1, 30, 20, 8, 3, 3, Color.white));
+            b2.Spawns.Add(new DatosSpawnUnidad("Rata de Sombra Alfa", Bando.Enemigo, 7, 6, 25, 15, 7, 3, 3, Color.white));
+            b2.Spawns.Add(new DatosSpawnUnidad("Rata de Sombra Exploradora", Bando.Enemigo, 7, 2, 18, 10, 6, 1, 4, Color.white));
 
             _batallasPredefinidas[2] = b2;
         }
 
         // ── Carga y Construcción de Batalla ────────────────────────────────────
         /// <summary>
-        /// Carga y genera la batalla especificada construyendo el Grid, asignando terrenos y spawneando unidades.
+        /// Carga y genera la batalla especificada construyendo el Grid, asignando terrenos y configurando unidades.
         /// </summary>
         public void CargarBatalla(int idBatalla, bool iniciarCombate = true)
         {
@@ -258,15 +258,10 @@ namespace Felinaria.Grid
 
             Debug.Log($"[MapLoader] 🗺️ Cargando '{batalla.NombreBatalla}' ({batalla.Columnas}x{batalla.Filas})...");
 
-            // 1. Destruir todas las unidades existentes en la escena
-            var unidadesPrevias = FindObjectsByType<UnitController>(FindObjectsSortMode.None);
-            foreach (var u in unidadesPrevias)
-            {
-                if (u != null && u.gameObject != null)
-                {
-                    DestroyImmediate(u.gameObject);
-                }
-            }
+            // 1. Obtener unidades preexistentes en la escena para reutilizar sus componentes visuales / sprites
+            var unidadesPrevias = new List<UnitController>(FindObjectsByType<UnitController>(FindObjectsSortMode.None));
+            var unidadesJugadorEscena = unidadesPrevias.FindAll(u => u.BandoUnidad == Bando.Jugador);
+            var unidadesEnemigoEscena = unidadesPrevias.FindAll(u => u.BandoUnidad == Bando.Enemigo);
 
             // 2. Limpiar registros en TurnManager
             if (TurnManager.Instancia != null)
@@ -291,12 +286,40 @@ namespace Felinaria.Grid
                 }
             }
 
-            // 5. Instanciar unidades de la batalla
+            // 5. Configurar o instanciar unidades de la batalla
+            var unidadesReutilizadas = new HashSet<UnitController>();
             if (batalla.Spawns != null)
             {
                 foreach (var spawn in batalla.Spawns)
                 {
-                    CrearUnidadEnEscena(spawn);
+                    UnitController unidadExistente = null;
+                    if (spawn.Bando == Bando.Jugador && unidadesJugadorEscena.Count > 0)
+                    {
+                        unidadExistente = unidadesJugadorEscena.Find(u => !unidadesReutilizadas.Contains(u));
+                    }
+                    else if (spawn.Bando == Bando.Enemigo && unidadesEnemigoEscena.Count > 0)
+                    {
+                        unidadExistente = unidadesEnemigoEscena.Find(u => !unidadesReutilizadas.Contains(u));
+                    }
+
+                    if (unidadExistente != null)
+                    {
+                        unidadesReutilizadas.Add(unidadExistente);
+                        ConfigurarUnidadExistente(unidadExistente, spawn);
+                    }
+                    else
+                    {
+                        CrearUnidadEnEscena(spawn);
+                    }
+                }
+            }
+
+            // Destruir unidades sobrantes que no formen parte de la nueva batalla
+            foreach (var u in unidadesPrevias)
+            {
+                if (u != null && !unidadesReutilizadas.Contains(u) && u.gameObject != null)
+                {
+                    DestroyImmediate(u.gameObject);
                 }
             }
 
@@ -328,6 +351,35 @@ namespace Felinaria.Grid
             }
 
             Debug.Log($"[MapLoader] ✅ '{batalla.NombreBatalla}' cargada exitosamente con {batalla.Spawns?.Count} unidades.");
+        }
+
+        /// <summary>
+        /// Reconfigura una unidad que ya existía en la escena respetando su SpriteRenderer e Inspector.
+        /// </summary>
+        private void ConfigurarUnidadExistente(UnitController unit, DatosSpawnUnidad spawn)
+        {
+            unit.gameObject.SetActive(true);
+            unit.ColInicial = spawn.Col;
+            unit.FilaInicial = spawn.Row;
+            unit.VidaMaxima = spawn.VidaMax;
+            unit.ManaMaximo = spawn.ManaMax;
+            unit.Ataque = spawn.Ataque;
+            unit.Defensa = spawn.Defensa;
+            unit.RangoMovimiento = spawn.Movimiento;
+            unit.RangoAtaqueMinimo = spawn.RangoAtaqueMin;
+            unit.RangoAtaqueMaximo = spawn.RangoAtaqueMax;
+
+            unit.RestaurarEstado(spawn.Col, spawn.Row, spawn.VidaMax, spawn.VidaMax, spawn.ManaMax, spawn.ManaMax, false, true);
+
+            if (GridManager.Instancia != null)
+            {
+                GridManager.Instancia.SetOcupacion(spawn.Col, spawn.Row, true);
+            }
+
+            if (TurnManager.Instancia != null)
+            {
+                TurnManager.Instancia.RegistrarUnidad(unit);
+            }
         }
 
         /// <summary>
