@@ -431,13 +431,15 @@ namespace Felinaria.UI
                 return;
             }
 
+            var unidad = UnidadSeleccionada;
+            string nombre = unidad.NombreUnidad;
             Vector2Int coordDestino = GridManager.Instancia.MundoACoordenada(new Vector3(worldPos.x, worldPos.y, 0f));
 
-            bool exito = UnidadSeleccionada.MoverACelda(coordDestino.x, coordDestino.y);
+            bool exito = unidad.MoverACelda(coordDestino.x, coordDestino.y);
 
             if (exito)
             {
-                Debug.Log($"[ActionMenu] Moviendo '{UnidadSeleccionada.NombreUnidad}' a ({coordDestino.x},{coordDestino.y}).");
+                Debug.Log($"[ActionMenu] Moviendo '{nombre}' a ({coordDestino.x},{coordDestino.y}).");
             }
             else
             {
@@ -461,6 +463,7 @@ namespace Felinaria.UI
                 return;
             }
 
+            var atacante = UnidadSeleccionada;
             UnitController objetivo = ObtenerUnidadEnPosicion2D(worldPos);
 
             if (objetivo == null || objetivo.BandoUnidad != Bando.Enemigo)
@@ -474,7 +477,7 @@ namespace Felinaria.UI
             // Ejecutar ataque a través del CombatSystem.
             if (CombatSystem.Instancia != null)
             {
-                bool exito = CombatSystem.Instancia.EjecutarAtaque(UnidadSeleccionada, objetivo);
+                bool exito = CombatSystem.Instancia.EjecutarAtaque(atacante, objetivo);
                 if (exito)
                     Debug.Log($"[ActionMenu] ¡Ataque ejecutado!");
                 else
@@ -501,18 +504,20 @@ namespace Felinaria.UI
                 return;
             }
 
+            var lanzador = UnidadSeleccionada;
+            var skill = _skillSeleccionada;
             Vector2Int coordDestino = GridManager.Instancia.MundoACoordenada(new Vector3(worldPos.x, worldPos.y, 0f));
 
             if (Combat.SkillSystem.Instancia != null)
             {
-                bool exito = Combat.SkillSystem.Instancia.EjecutarHabilidad(UnidadSeleccionada, _skillSeleccionada, coordDestino);
+                bool exito = Combat.SkillSystem.Instancia.EjecutarHabilidad(lanzador, skill, coordDestino);
                 if (exito)
                 {
-                    Debug.Log($"[ActionMenu] ✨ '{_skillSeleccionada.NombreHabilidad}' lanzada con éxito hacia ({coordDestino.x},{coordDestino.y}).");
+                    Debug.Log($"[ActionMenu] ✨ '{skill.NombreHabilidad}' lanzada con éxito hacia ({coordDestino.x},{coordDestino.y}).");
                 }
                 else
                 {
-                    Debug.Log($"[ActionMenu] No se pudo lanzar '{_skillSeleccionada.NombreHabilidad}' en esa celda.");
+                    Debug.Log($"[ActionMenu] No se pudo lanzar '{skill.NombreHabilidad}' en esa celda.");
                 }
             }
 
