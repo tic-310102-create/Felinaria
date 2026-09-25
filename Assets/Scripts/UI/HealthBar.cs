@@ -290,6 +290,29 @@ namespace Felinaria.UI
         }
 
         /// <summary>
+        /// Actualiza de forma inmediata y directa la barra de vida con los valores dados.
+        /// </summary>
+        public void ActualizarVida(int vidaActual, int vidaMaximo)
+        {
+            if (_canvas == null)
+            {
+                CrearBarraVisual();
+            }
+
+            if (vidaMaximo <= 0) vidaMaximo = 1;
+            _vidaObjetivoNormalizado = Mathf.Clamp01((float)vidaActual / vidaMaximo);
+            if (_imagenRellenoHP != null)
+            {
+                _imagenRellenoHP.fillAmount = _vidaObjetivoNormalizado;
+                _imagenRellenoHP.color = ObtenerColorVida(_vidaObjetivoNormalizado);
+            }
+            if (_imagenGhostHP != null)
+            {
+                _imagenGhostHP.fillAmount = _vidaObjetivoNormalizado;
+            }
+        }
+
+        /// <summary>
         /// Actualiza de forma inmediata y directa la barra de maná con los valores dados.
         /// </summary>
         public void ActualizarMana(int manaActual, int manaMaximo)

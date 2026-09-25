@@ -169,6 +169,11 @@ namespace Felinaria.UI
 
         private void OnDestroy()
         {
+            if (TurnManager.InstanciaExiste)
+            {
+                TurnManager.Instancia.OnCambioTurno -= OnCambioTurnoHandler;
+            }
+
             if (_instancia == this)
             {
                 _instancia = null;
@@ -181,6 +186,12 @@ namespace Felinaria.UI
 
             // Auto-instanciar SaveLoadUI como respaldo para asegurar que el panel de guardado esté activo
             _ = SaveLoadUI.Instancia;
+
+            // Suscribirse a cambios de turno para cerrar automáticamente cualquier menú abierto
+            if (TurnManager.Instancia != null)
+            {
+                TurnManager.Instancia.OnCambioTurno += OnCambioTurnoHandler;
+            }
 
             // Buscar Canvas existente en la escena o crear uno automático
             if (CanvasPrincipal == null || CanvasPrincipal.renderMode != RenderMode.ScreenSpaceOverlay || CanvasPrincipal.name == "HealthBar_Canvas")
@@ -213,6 +224,11 @@ namespace Felinaria.UI
 
             CrearMenuUI();
             OcultarMenu();
+        }
+
+        private void OnCambioTurnoHandler(EstadoTurno estado)
+        {
+            CerrarMenu();
         }
 
         private void Update()
@@ -654,7 +670,7 @@ namespace Felinaria.UI
         /// <summary>
         /// Oculta el menú y vuelve al modo Selección.
         /// </summary>
-        private void CerrarMenu()
+        public void CerrarMenu()
         {
             OcultarMenu();
             LimpiarResaltado();

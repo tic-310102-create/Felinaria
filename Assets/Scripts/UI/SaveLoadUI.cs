@@ -91,6 +91,7 @@ namespace Felinaria.UI
                 return;
             }
             _instancia = this;
+            InicializarUI();
         }
 
         private void Start()
@@ -100,10 +101,7 @@ namespace Felinaria.UI
 
         private void OnEnable()
         {
-            if (CanvasUI == null || _panelInstanciado == null)
-            {
-                InicializarUI();
-            }
+            InicializarUI();
         }
 
         public void InicializarUI()
@@ -113,17 +111,28 @@ namespace Felinaria.UI
             // Cachear fuente segura una sola vez.
             _fuenteCache = ObtenerFuenteSegura();
 
-            // Buscar Canvas si no se asignó.
-            if (CanvasUI == null)
-                CanvasUI = FindFirstObjectByType<Canvas>();
+            // Buscar Canvas Overlay exclusivo que no sea WorldSpace ni HealthBar_Canvas
+            if (CanvasUI == null || CanvasUI.renderMode != RenderMode.ScreenSpaceOverlay || CanvasUI.name == "HealthBar_Canvas")
+            {
+                CanvasUI = null;
+                var canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+                foreach (var c in canvases)
+                {
+                    if (c != null && c.renderMode == RenderMode.ScreenSpaceOverlay && c.gameObject.name != "HealthBar_Canvas")
+                    {
+                        CanvasUI = c;
+                        break;
+                    }
+                }
+            }
 
             if (CanvasUI == null)
             {
-                Debug.Log("[SaveLoadUI] No se encontró Canvas. Creando Canvas automático para UI...");
+                Debug.Log("[SaveLoadUI] Creando Canvas exclusivo ScreenSpaceOverlay para SaveLoadUI...");
                 var canvasObj = new GameObject("SaveLoadUI_Canvas");
                 CanvasUI = canvasObj.AddComponent<Canvas>();
                 CanvasUI.renderMode = RenderMode.ScreenSpaceOverlay;
-                CanvasUI.sortingOrder = 200;
+                CanvasUI.sortingOrder = 300; // Orden alto para que siempre se dibuje por encima de todo
 
                 canvasObj.AddComponent<GraphicRaycaster>();
             }

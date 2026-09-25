@@ -73,6 +73,11 @@ namespace Felinaria.Data
         /// Crea un backup del archivo anterior antes de sobreescribir.
         /// </summary>
         /// <returns>True si el guardado fue exitoso.</returns>
+        /// <summary>
+        /// Guarda la partida actual recopilando el estado del juego.
+        /// Crea un backup del archivo anterior antes de sobreescribir.
+        /// </summary>
+        /// <returns>True si el guardado fue exitoso.</returns>
         public static bool GuardarPartida()
         {
             try
@@ -86,8 +91,14 @@ namespace Felinaria.Data
                 // Crear backup del archivo anterior (si existe).
                 CrearBackup();
 
-                // Escribir el archivo.
+                // Escribir el archivo directamente en disco.
                 File.WriteAllText(RutaArchivo, json);
+
+                var posPlayer = datos.Unidades != null ? datos.Unidades.Find(u => u.Bando == 0) : null;
+                if (posPlayer != null)
+                {
+                    Debug.Log($"[SaveSystem] Guardando archivo JSON en: {Application.persistentDataPath} | Posición jugador: ({posPlayer.Columna}, {posPlayer.Fila}) | MP: {posPlayer.ManaActual}");
+                }
 
                 Debug.Log($"[SaveSystem] ✅ Partida guardada exitosamente.");
                 Debug.Log($"[SaveSystem] Ruta: {RutaArchivo}");
@@ -121,6 +132,12 @@ namespace Felinaria.Data
 
             if (datos != null)
             {
+                var posPlayer = datos.Unidades != null ? datos.Unidades.Find(u => u.Bando == 0) : null;
+                if (posPlayer != null)
+                {
+                    Debug.Log($"[SaveSystem] Cargando archivo JSON | Posición leída: ({posPlayer.Columna}, {posPlayer.Fila}) | MP leído: {posPlayer.ManaActual}");
+                }
+
                 // Guardar el tiempo acumulado para continuar contando.
                 _tiempoAcumuladoPrevio = datos.TiempoJugadoSegundos;
                 _tiempoInicioSesion = Time.realtimeSinceStartup;
@@ -175,11 +192,14 @@ namespace Felinaria.Data
                 {
                     if (datosU == null) continue;
 
-                    // Buscar unidad por nombre coincidente
                     UnitController unidadEncontrada = null;
+
+                    // 1. Prioridad: Coincidir por BANDO y NOMBRE
                     for (int i = 0; i < unidadesNoEmparejadas.Count; i++)
                     {
-                        if (unidadesNoEmparejadas[i] != null && unidadesNoEmparejadas[i].NombreUnidad == datosU.NombreUnidad)
+                        if (unidadesNoEmparejadas[i] != null &&
+                            (int)unidadesNoEmparejadas[i].BandoUnidad == datosU.Bando &&
+                            unidadesNoEmparejadas[i].NombreUnidad == datosU.NombreUnidad)
                         {
                             unidadEncontrada = unidadesNoEmparejadas[i];
                             unidadesNoEmparejadas.RemoveAt(i);
@@ -187,12 +207,26 @@ namespace Felinaria.Data
                         }
                     }
 
-                    // Fallback: buscar por bando si el nombre difiere
+                    // 2. Fallback: Coincidir por BANDO
                     if (unidadEncontrada == null)
                     {
                         for (int i = 0; i < unidadesNoEmparejadas.Count; i++)
                         {
                             if (unidadesNoEmparejadas[i] != null && (int)unidadesNoEmparejadas[i].BandoUnidad == datosU.Bando)
+                            {
+                                unidadEncontrada = unidadesNoEmparejadas[i];
+                                unidadesNoEmparejadas.RemoveAt(i);
+                                break;
+                            }
+                        }
+                    }
+
+                    // 3. Fallback: Coincidir por NOMBRE
+                    if (unidadEncontrada == null)
+                    {
+                        for (int i = 0; i < unidadesNoEmparejadas.Count; i++)
+                        {
+                            if (unidadesNoEmparejadas[i] != null && unidadesNoEmparejadas[i].NombreUnidad == datosU.NombreUnidad)
                             {
                                 unidadEncontrada = unidadesNoEmparejadas[i];
                                 unidadesNoEmparejadas.RemoveAt(i);
@@ -223,7 +257,13 @@ namespace Felinaria.Data
                 }
             }
 
-            // 4. Restaurar configuración de audio si existe
+            // 4. Cerrar cualquier ActionMenu abierto al cargar
+            if (Felinaria.UI.ActionMenu.InstanciaExiste)
+            {
+                Felinaria.UI.ActionMenu.Instancia.CerrarMenu();
+            }
+
+            // 5. Restaurar configuración de audio si existe
             if (datos.ConfiguracionAudio != null && Felinaria.Audio.AudioManager.Instancia != null)
             {
                 Felinaria.Audio.AudioManager.Instancia.SetVolumenMusica(datos.ConfiguracionAudio.VolumenMusica);
@@ -293,7 +333,8 @@ namespace Felinaria.Data
             // ── Escena activa ──────────────────────────────────────────────────
             datos.NombreEscena = SceneManager.GetActiveScene().name;
 
-            // ── TurnManager ────────────────────────────────────────────────────
+            // ── TurnManager y Unidades ──────────────────────────────────────────
+            var unidadesRecolectadas = new HashSet<UnitController>();
             if (TurnManager.Instancia != null)
             {
                 datos.RondaActual = TurnManager.Instancia.RondaActual;
@@ -302,14 +343,24 @@ namespace Felinaria.Data
                 // Recopilar unidades del jugador.
                 foreach (var unidad in TurnManager.Instancia.UnidadesJugador)
                 {
-                    if (unidad == null) continue;
-                    datos.Unidades.Add(RecopilarDatosUnidad(unidad));
+                    if (unidad != null && unidadesRecolectadas.Add(unidad))
+                        datos.Unidades.Add(RecopilarDatosUnidad(unidad));
                 }
 
                 // Recopilar unidades enemigas.
                 foreach (var unidad in TurnManager.Instancia.UnidadesEnemigo)
                 {
-                    if (unidad == null) continue;
+                    if (unidad != null && unidadesRecolectadas.Add(unidad))
+                        datos.Unidades.Add(RecopilarDatosUnidad(unidad));
+                }
+            }
+
+            // Fallback para asegurar que todas las unidades presentes en la escena se guarden
+            var todasLasUnidades = UnityEngine.Object.FindObjectsByType<UnitController>(FindObjectsSortMode.None);
+            foreach (var unidad in todasLasUnidades)
+            {
+                if (unidad != null && unidadesRecolectadas.Add(unidad))
+                {
                     datos.Unidades.Add(RecopilarDatosUnidad(unidad));
                 }
             }

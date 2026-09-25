@@ -404,6 +404,11 @@ namespace Felinaria.Units
             }
 
             // ── Todo OK: iniciar movimiento ────────────────────────────────────
+            if (Felinaria.UI.ActionMenu.InstanciaExiste)
+            {
+                Felinaria.UI.ActionMenu.Instancia.CerrarMenu();
+            }
+
             _corrutinaMover = StartCoroutine(DesplazarACelda(col, fila));
             return true;
         }
@@ -425,6 +430,8 @@ namespace Felinaria.Units
             // Actualizar la coordenada lógica antes de moverse
             // (otras unidades sabrán que esta celda pronto estará ocupada).
             Coordenada = new Vector2Int(colDestino, filaDestino);
+            ColInicial = colDestino;
+            FilaInicial = filaDestino;
             GridManager.Instancia.SetOcupacion(colDestino, filaDestino, true);
 
             // ── Bucle de interpolación ──────────────────────────────────────────
@@ -442,6 +449,9 @@ namespace Felinaria.Units
 
             // Snappear al centro exacto de la celda al terminar.
             transform.position = posDestino;
+            ColInicial = colDestino;
+            FilaInicial = filaDestino;
+            Coordenada = new Vector2Int(colDestino, filaDestino);
 
             EstaMoviendose = false;
             MarcarComoUsada();
@@ -606,8 +616,9 @@ namespace Felinaria.Units
             var healthBar = GetComponent<Felinaria.UI.HealthBar>();
             if (healthBar != null)
             {
-                healthBar.ActualizarBarra();
+                healthBar.ActualizarVida(VidaActual, VidaMaxima);
                 healthBar.ActualizarMana(ManaActual, ManaMaximo);
+                healthBar.ActualizarBarra();
             }
 
             if (!estaViva || VidaActual <= 0)
