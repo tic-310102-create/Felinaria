@@ -47,7 +47,25 @@ namespace Felinaria.UI
     public class ActionMenu : MonoBehaviour
     {
         // ── Singleton ──────────────────────────────────────────────────────────
-        public static ActionMenu Instancia { get; private set; }
+        private static ActionMenu _instancia;
+        /// <summary>Acceso global al ActionMenu con auto-instanciación segura.</summary>
+        public static ActionMenu Instancia
+        {
+            get
+            {
+                if (_instancia == null)
+                {
+                    _instancia = FindFirstObjectByType<ActionMenu>();
+                    if (_instancia == null)
+                    {
+                        var go = new GameObject("ActionMenu_Auto");
+                        _instancia = go.AddComponent<ActionMenu>();
+                    }
+                }
+                return _instancia;
+            }
+            private set => _instancia = value;
+        }
 
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("Referencia al Canvas")]
@@ -111,13 +129,13 @@ namespace Felinaria.UI
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
-            if (Instancia != null && Instancia != this)
+            if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[ActionMenu] Ya existe una instancia. Destruyendo duplicado.");
                 Destroy(gameObject);
                 return;
             }
-            Instancia = this;
+            _instancia = this;
         }
 
         private void Start()

@@ -52,8 +52,25 @@ namespace Felinaria.Combat
     public class CombatSystem : MonoBehaviour
     {
         // ── Singleton ──────────────────────────────────────────────────────────
-        /// <summary>Acceso global al CombatSystem.</summary>
-        public static CombatSystem Instancia { get; private set; }
+        private static CombatSystem _instancia;
+        /// <summary>Acceso global al CombatSystem con auto-instanciación segura.</summary>
+        public static CombatSystem Instancia
+        {
+            get
+            {
+                if (_instancia == null)
+                {
+                    _instancia = FindFirstObjectByType<CombatSystem>();
+                    if (_instancia == null)
+                    {
+                        var go = new GameObject("CombatSystem_Auto");
+                        _instancia = go.AddComponent<CombatSystem>();
+                    }
+                }
+                return _instancia;
+            }
+            private set => _instancia = value;
+        }
 
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("Configuración de Combate")]
@@ -84,13 +101,13 @@ namespace Felinaria.Combat
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
-            if (Instancia != null && Instancia != this)
+            if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[CombatSystem] Ya existe una instancia. Destruyendo duplicado.");
                 Destroy(gameObject);
                 return;
             }
-            Instancia = this;
+            _instancia = this;
         }
 
         // ── API pública ────────────────────────────────────────────────────────

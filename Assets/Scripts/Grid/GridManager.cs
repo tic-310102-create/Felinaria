@@ -102,8 +102,25 @@ namespace Felinaria.Grid
 
         // ── Singleton ──────────────────────────────────────────────────────────
         // ── Singleton y Estado de Inicialización ───────────────────────────────
-        /// <summary>Acceso global al GridManager desde cualquier script.</summary>
-        public static GridManager Instancia { get; private set; }
+        private static GridManager _instancia;
+        /// <summary>Acceso global al GridManager con auto-instanciación segura.</summary>
+        public static GridManager Instancia
+        {
+            get
+            {
+                if (_instancia == null)
+                {
+                    _instancia = FindFirstObjectByType<GridManager>();
+                    if (_instancia == null)
+                    {
+                        var go = new GameObject("GridManager_Auto");
+                        _instancia = go.AddComponent<GridManager>();
+                    }
+                }
+                return _instancia;
+            }
+            private set => _instancia = value;
+        }
 
         /// <summary>Indica si el tablero ya fue generado y sus celdas están listas para consultarse.</summary>
         public bool EstaInicializado { get; private set; } = false;
@@ -118,14 +135,13 @@ namespace Felinaria.Grid
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
-            // Patrón Singleton: solo puede existir una instancia.
-            if (Instancia != null && Instancia != this)
+            if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[GridManager] Ya existe una instancia. Destruyendo duplicado.");
                 Destroy(gameObject);
                 return;
             }
-            Instancia = this;
+            _instancia = this;
 
             // Generar la cuadrícula inmediatamente en Awake para asegurar
             // que todas las celdas existan antes de que las unidades ejecuten Start().

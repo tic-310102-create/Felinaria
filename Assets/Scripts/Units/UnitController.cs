@@ -113,8 +113,9 @@ namespace Felinaria.Units
         /// <summary>True si esta unidad ya actuó en el turno actual.</summary>
         public bool YaActuoEsteTurno { get; private set; }
 
-        // Referencia al SpriteRenderer para cambiar colores.
+        // Referencia al SpriteRenderer o MeshRenderer 3D para cambiar colores.
         private SpriteRenderer _spriteRenderer;
+        private Renderer _meshRenderer;
 
         // Coroutine activa de movimiento (para poder cancelarla si fuera necesario).
         private Coroutine _corrutinaMover;
@@ -123,14 +124,21 @@ namespace Felinaria.Units
         private void Awake()
         {
             _spriteRenderer = GetComponent<SpriteRenderer>();
+            _meshRenderer   = GetComponent<Renderer>();
 
             // Cargar stats desde ScriptableObject si está asignado.
             CargarDesdeScriptableObject();
 
             VidaActual = VidaMaxima;
 
-            // Asegurar que la unidad tiene un Collider2D para detección de clics.
+            // Asegurar que la unidad tiene un Collider 3D para detección de clics.
             AsegurarCollider();
+
+            // Auto-adjuntar HealthBar flotante si no existe
+            if (GetComponent<Felinaria.UI.HealthBar>() == null)
+            {
+                gameObject.AddComponent<Felinaria.UI.HealthBar>();
+            }
         }
 
         private void Start()
@@ -161,8 +169,7 @@ namespace Felinaria.Units
             ColorUsado        = FichaStats.ColorUsado;
 
             // Aplicar color graybox inmediatamente.
-            if (_spriteRenderer != null)
-                _spriteRenderer.color = ColorNormal;
+            AplicarColorVisual(ColorNormal);
 
             Debug.Log($"[UnitController] Stats cargados desde ScriptableObject: '{FichaStats.NombrePersonaje}'");
         }
@@ -375,14 +382,28 @@ namespace Felinaria.Units
 
         // ── Estado de turno ────────────────────────────────────────────────────
         /// <summary>
+        /// Aplica un color al sprite 2D o material 3D de la unidad.
+        /// </summary>
+        private void AplicarColorVisual(Color c)
+        {
+            if (_spriteRenderer != null)
+            {
+                _spriteRenderer.color = c;
+            }
+            else if (_meshRenderer != null && _meshRenderer.material != null)
+            {
+                _meshRenderer.material.color = c;
+            }
+        }
+
+        /// <summary>
         /// Marca la unidad como "ya actuó" y cambia su color visual.
         /// Llamado automáticamente al terminar de moverse.
         /// </summary>
         private void MarcarComoUsada()
         {
             YaActuoEsteTurno = true;
-            if (_spriteRenderer != null)
-                _spriteRenderer.color = ColorUsado;
+            AplicarColorVisual(ColorUsado);
         }
 
         /// <summary>
@@ -401,8 +422,7 @@ namespace Felinaria.Units
         public void ReiniciarTurno()
         {
             YaActuoEsteTurno = false;
-            if (_spriteRenderer != null)
-                _spriteRenderer.color = ColorNormal;
+            AplicarColorVisual(ColorNormal);
         }
 
         // ── Combate ────────────────────────────────────────────────────────────

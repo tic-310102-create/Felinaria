@@ -65,8 +65,25 @@ namespace Felinaria.Managers
         public List<UnitController> UnidadesEnemigo = new List<UnitController>();
 
         // ── Singleton ──────────────────────────────────────────────────────────
-        /// <summary>Acceso global al TurnManager desde cualquier script.</summary>
-        public static TurnManager Instancia { get; private set; }
+        private static TurnManager _instancia;
+        /// <summary>Acceso global al TurnManager con auto-instanciación segura.</summary>
+        public static TurnManager Instancia
+        {
+            get
+            {
+                if (_instancia == null)
+                {
+                    _instancia = FindFirstObjectByType<TurnManager>();
+                    if (_instancia == null)
+                    {
+                        var go = new GameObject("TurnManager_Auto");
+                        _instancia = go.AddComponent<TurnManager>();
+                    }
+                }
+                return _instancia;
+            }
+            private set => _instancia = value;
+        }
 
         // ── Estado público ─────────────────────────────────────────────────────
         /// <summary>Estado actual de la máquina de turnos.</summary>
@@ -76,38 +93,40 @@ namespace Felinaria.Managers
         public int RondaActual { get; private set; } = 0;
 
         // ── Eventos C# ─────────────────────────────────────────────────────────
-        // Los eventos permiten que la UI, la IA y otros sistemas se enganchen
-        // al cambio de turno sin que TurnManager los conozca directamente.
-        // Uso: TurnManager.Instancia.OnCambioTurno += MiMetodo;
-
-        /// <summary>
-        /// Se dispara cada vez que el turno cambia de estado.
-        /// Parámetro: el nuevo EstadoTurno.
-        /// </summary>
         public event Action<EstadoTurno> OnCambioTurno;
-
-        /// <summary>
-        /// Se dispara al inicio de cada nueva ronda.
-        /// Parámetro: el número de ronda.
-        /// </summary>
         public event Action<int> OnNuevaRonda;
 
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
-            // Patrón Singleton: solo puede existir uno.
-            if (Instancia != null && Instancia != this)
+            if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[TurnManager] Ya existe una instancia. Destruyendo duplicado.");
                 Destroy(gameObject);
                 return;
             }
-            Instancia = this;
+            _instancia = this;
         }
 
         private void Start()
         {
+            AutoDescubrirUnidades();
             IniciarCombate();
+        }
+
+        /// <summary>
+        /// Busca todas las unidades presentes en la escena y las clasifica por bando.
+        /// </summary>
+        private void AutoDescubrirUnidades()
+        {
+            var todas = FindObjectsByType<UnitController>(FindObjectsSortMode.None);
+            foreach (var u in todas)
+            {
+                if (u.BandoUnidad == Bando.Jugador && !UnidadesJugador.Contains(u))
+                    UnidadesJugador.Add(u);
+                else if (u.BandoUnidad == Bando.Enemigo && !UnidadesEnemigo.Contains(u))
+                    UnidadesEnemigo.Add(u);
+            }
         }
 
         // ── Flujo principal ────────────────────────────────────────────────────
