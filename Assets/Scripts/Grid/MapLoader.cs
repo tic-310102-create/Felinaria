@@ -130,6 +130,10 @@ namespace Felinaria.Grid
         // Cache de plantillas de batalla
         private Dictionary<int, DatosBatalla> _batallasPredefinidas = new Dictionary<int, DatosBatalla>();
 
+        [Header("Configuración")]
+        [Tooltip("Carga automáticamente la Batalla 1 al iniciar el juego.")]
+        public bool CargarAutomaticoAlIniciar = true;
+
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
@@ -142,6 +146,15 @@ namespace Felinaria.Grid
             _instancia = this;
 
             RegistrarBatallasPredefinidas();
+        }
+
+        private void Start()
+        {
+            if (CargarAutomaticoAlIniciar)
+            {
+                // Disparar automáticamente la Batalla 1 (8x6) en el primer frame
+                CargarBatalla(1, true);
+            }
         }
 
         private void OnApplicationQuit()

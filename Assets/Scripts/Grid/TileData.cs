@@ -98,7 +98,7 @@ namespace Felinaria.Grid
                     data.CostoMovimiento = 99;
                     data.BonusDefensa = 0;
                     data.BonusAtaque = 0;
-                    data.ColorTerreno = new Color(0.18f, 0.42f, 0.82f, 0.95f); // Azul agua
+                    data.ColorTerreno = new Color(0.2f, 0.45f, 0.85f, 1f); // Azul río
                     data.AplicarColor = true;
                     break;
 
@@ -109,7 +109,7 @@ namespace Felinaria.Grid
                     data.CostoMovimiento = 2;
                     data.BonusDefensa = 3;
                     data.BonusAtaque = 0;
-                    data.ColorTerreno = new Color(0.15f, 0.55f, 0.25f, 0.95f); // Verde bosque
+                    data.ColorTerreno = new Color(0.18f, 0.45f, 0.15f, 1f); // Verde bosque
                     data.AplicarColor = true;
                     break;
 

@@ -370,12 +370,32 @@ namespace Felinaria.Grid
         /// <summary>
         /// Destruye todos los objetos de celda y limpia el diccionario.
         /// </summary>
+        /// <summary>
+        /// Destruye todos los objetos de celda y limpia el diccionario.
+        /// </summary>
         public void LimpiarCuadricula()
         {
             if (_contenedorCeldas != null)
             {
-                Destroy(_contenedorCeldas.gameObject);
+                if (Application.isPlaying)
+                    Destroy(_contenedorCeldas.gameObject);
+                else
+                    DestroyImmediate(_contenedorCeldas.gameObject);
+                _contenedorCeldas = null;
             }
+
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                var hijo = transform.GetChild(i);
+                if (hijo != null && hijo.name == "Celdas")
+                {
+                    if (Application.isPlaying)
+                        Destroy(hijo.gameObject);
+                    else
+                        DestroyImmediate(hijo.gameObject);
+                }
+            }
+
             _celdas.Clear();
         }
 
@@ -530,13 +550,21 @@ namespace Felinaria.Grid
             }
             celda.Terreno = terreno;
 
-            // Actualizar visual si el terreno tiene color propio.
+            // Actualizar visual inmediatamente en el SpriteRenderer
             if (celda.Objeto != null)
             {
                 var sr = celda.Objeto.GetComponent<SpriteRenderer>();
                 if (sr != null)
                 {
-                    if (terreno != null && terreno.AplicarColor)
+                    if (terreno != null && terreno.Tipo == TipoTerreno.CoberturaBosque)
+                    {
+                        sr.color = new Color(0.18f, 0.45f, 0.15f, 1f); // Verde bosque
+                    }
+                    else if (terreno != null && terreno.Tipo == TipoTerreno.ObstaculoAgua)
+                    {
+                        sr.color = new Color(0.2f, 0.45f, 0.85f, 1f); // Azul río
+                    }
+                    else if (terreno != null && terreno.AplicarColor)
                     {
                         sr.color = terreno.ColorTerreno;
                     }
