@@ -124,9 +124,13 @@ namespace Felinaria.UI
         {
             _camaraPrincipal = Camera.main;
 
-            // Crear Canvas si no se asignó uno manualmente.
+            // Buscar Canvas existente en la escena o crear uno automático
             if (CanvasPrincipal == null)
-                CrearCanvasAutomatico();
+            {
+                CanvasPrincipal = FindFirstObjectByType<Canvas>();
+                if (CanvasPrincipal == null)
+                    CrearCanvasAutomatico();
+            }
 
             CrearMenuUI();
             OcultarMenu();
@@ -149,10 +153,12 @@ namespace Felinaria.UI
         /// </summary>
         private void ProcesarInput()
         {
-            // Detectar clic izquierdo o toque.
-            if (!Input.GetMouseButtonDown(0)) return;
+            bool clicIzquierdo = Input.GetMouseButtonDown(0);
+            bool clicDerecho   = Input.GetMouseButtonDown(1);
 
-            // Ignorar si el clic fue sobre la UI (botones del menú).
+            if (!clicIzquierdo && !clicDerecho) return;
+
+            // Ignorar si el clic fue sobre la UI (botones del menú)
             if (UnityEngine.EventSystems.EventSystem.current != null &&
                 UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
                 return;
@@ -162,8 +168,18 @@ namespace Felinaria.UI
 
             if (_camaraPrincipal == null) return;
 
-            // Generar rayo 3D desde la cámara a la posición del cursor.
+            // Generar rayo 3D desde la cámara a la posición del cursor
             Ray ray = _camaraPrincipal.ScreenPointToRay(Input.mousePosition);
+
+            // Atajo con Clic Secundario (Derecho): Mover directamente a la celda clickeada
+            if (clicDerecho && UnidadSeleccionada != null)
+            {
+                Debug.Log($"[ActionMenu] Clic secundario detectado → Intento de movimiento directo para '{UnidadSeleccionada.NombreUnidad}'");
+                IntentarMover(ray);
+                return;
+            }
+
+            if (!clicIzquierdo) return;
 
             switch (ModoActual)
             {
@@ -172,8 +188,8 @@ namespace Felinaria.UI
                     break;
 
                 case ModoInteraccion.MenuVisible:
-                    // Si hace clic fuera del menú, cerrar.
-                    CerrarMenu();
+                    // Flujo directo / Fallback: si el jugador hace clic en el tablero con el menú visible
+                    ManejarClicConMenuVisible(ray);
                     break;
 
                 case ModoInteraccion.EsperandoMover:
@@ -184,6 +200,67 @@ namespace Felinaria.UI
                     IntentarAtacar(ray);
                     break;
             }
+        }
+
+        /// <summary>
+        /// Maneja un clic en el tablero cuando el menú de acciones está visible.
+        /// Si se hace clic en otra unidad aliada, se selecciona.
+        /// Si se hace clic en una celda válida del tablero, se mueve la unidad directamente (atajo/fallback).
+        /// Si se hace clic en un enemigo, intenta atacar si está en rango.
+        /// </summary>
+        private void ManejarClicConMenuVisible(Ray ray)
+        {
+            // 1. ¿Clic sobre otra unidad?
+            RaycastHit[] hits = Physics.RaycastAll(ray, 1000f, ~0, QueryTriggerInteraction.Collide);
+            if (hits != null && hits.Length > 0)
+            {
+                System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+                foreach (var hit in hits)
+                {
+                    var u = hit.collider.GetComponentInParent<UnitController>() ?? hit.collider.GetComponent<UnitController>();
+                    if (u != null)
+                    {
+                        if (u == UnidadSeleccionada)
+                        {
+                            // Clic en la misma unidad seleccionada: mantener menú
+                            return;
+                        }
+                        if (u.BandoUnidad == Bando.Jugador && !u.YaActuoEsteTurno)
+                        {
+                            // Seleccionar otra unidad aliada
+                            SeleccionarUnidad(u);
+                            return;
+                        }
+                        if (u.BandoUnidad == Bando.Enemigo)
+                        {
+                            // Clic en enemigo: intentar atacarlo
+                            IntentarAtacar(ray);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // 2. ¿Clic en una celda del tablero? Intentar mover directamente (Atajo / Fallback)
+            if (UnidadSeleccionada != null && GridManager.Instancia != null)
+            {
+                if (ObtenerPuntoImpactoTablero(ray, out Vector3 puntoImpacto))
+                {
+                    Vector2Int coordDestino = GridManager.Instancia.MundoACoordenada(puntoImpacto);
+                    if (GridManager.Instancia.EsCoordenadaValida(coordDestino))
+                    {
+                        if (coordDestino != UnidadSeleccionada.Coordenada)
+                        {
+                            Debug.Log($"[ActionMenu] Clic directo en celda ({coordDestino.x},{coordDestino.y}) → Moviendo directamente.");
+                            IntentarMover(ray);
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // Si clicó fuera del tablero, cerrar menú
+            CerrarMenu();
         }
 
         /// <summary>
@@ -229,12 +306,15 @@ namespace Felinaria.UI
         }
 
         /// <summary>
-        /// Selecciona una unidad y muestra el menú de acciones.
+        /// Selecciona una unidad, resalta sus celdas de movimiento y muestra el menú de acciones.
         /// </summary>
         private void SeleccionarUnidad(UnitController unidad)
         {
             UnidadSeleccionada = unidad;
             Debug.Log($"[ActionMenu] Unidad seleccionada: '{unidad.NombreUnidad}' en ({unidad.Coordenada.x},{unidad.Coordenada.y})");
+
+            // Resaltar inmediatamente las celdas a las que puede desplazarse
+            ResaltarCeldasMovimiento();
 
             MostrarMenu();
         }
@@ -549,7 +629,7 @@ namespace Felinaria.UI
             return false;
         }
 
-        // ── Creación automática del Canvas ─────────────────────────────────────
+        // ── Creación automática del Canvas y UI ────────────────────────────────
         /// <summary>
         /// Crea un Canvas "Screen Space - Overlay" si no se asignó uno manualmente.
         /// </summary>
@@ -562,16 +642,13 @@ namespace Felinaria.UI
             CanvasPrincipal.renderMode = RenderMode.ScreenSpaceOverlay;
             CanvasPrincipal.sortingOrder = 100;
 
-            // CanvasScaler para que la UI se vea bien en diferentes resoluciones.
             var scaler = canvasObj.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
 
-            // GraphicRaycaster necesario para que los botones funcionen.
             canvasObj.AddComponent<GraphicRaycaster>();
 
-            // EventSystem necesario para detectar clics en UI.
-            if (FindObjectOfType<UnityEngine.EventSystems.EventSystem>() == null)
+            if (FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
             {
                 var eventSystemObj = new GameObject("EventSystem");
                 eventSystemObj.AddComponent<UnityEngine.EventSystems.EventSystem>();
@@ -582,44 +659,52 @@ namespace Felinaria.UI
         }
 
         /// <summary>
-        /// Crea los botones del menú de acciones por código.
+        /// Crea los botones del menú de acciones por código con estructura robusta.
         /// </summary>
         private void CrearMenuUI()
         {
             if (CanvasPrincipal == null) return;
+
+            if (_panelMenu != null)
+                Destroy(_panelMenu);
 
             // ── Panel contenedor ──────────────────────────────────────────────
             _panelMenu = new GameObject("Panel_ActionMenu");
             _panelMenu.transform.SetParent(CanvasPrincipal.transform, false);
 
             var panelImg = _panelMenu.AddComponent<Image>();
-            panelImg.color = new Color(0.1f, 0.1f, 0.15f, 0.9f); // Fondo oscuro semi-transparente.
+            panelImg.color = new Color(0.12f, 0.12f, 0.18f, 0.95f); // Fondo oscuro elegante
 
             var rectPanel = _panelMenu.GetComponent<RectTransform>();
-            float alturaTotal = (AltoBoton * 3) + (EspaciadoBoton * 4);
-            rectPanel.sizeDelta = new Vector2(AnchoBoton + 20f, alturaTotal);
-            rectPanel.pivot = new Vector2(0f, 0.5f); // Pivot a la izquierda-centro.
+            rectPanel.pivot = new Vector2(0f, 0.5f);
+            rectPanel.sizeDelta = new Vector2(AnchoBoton + 24f, (AltoBoton * 3) + (EspaciadoBoton * 4) + 16f);
 
-            // Layout vertical automático.
+            // Layout vertical automático
             var layout = _panelMenu.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(10, 10, (int)EspaciadoBoton, (int)EspaciadoBoton);
+            layout.padding = new RectOffset(10, 10, 8, 8);
             layout.spacing = EspaciadoBoton;
             layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
+            var fitter = _panelMenu.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fitter.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
+
             // ── Botón MOVER ──────────────────────────────────────────────────
-            _botonMover = CrearBoton("Btn_Mover", "⬛ Mover", ColorBotonMover, OnBotonMover);
+            _botonMover = CrearBoton("Btn_Mover", "Mover", ColorBotonMover, OnBotonMover);
 
             // ── Botón ATACAR ─────────────────────────────────────────────────
-            _botonAtacar = CrearBoton("Btn_Atacar", "⚔️ Atacar", ColorBotonAtacar, OnBotonAtacar);
+            _botonAtacar = CrearBoton("Btn_Atacar", "Atacar", ColorBotonAtacar, OnBotonAtacar);
 
             // ── Botón ESPERAR ────────────────────────────────────────────────
-            _botonEsperar = CrearBoton("Btn_Esperar", "⏳ Esperar", ColorBotonEsperar, OnBotonEsperar);
+            _botonEsperar = CrearBoton("Btn_Esperar", "Esperar", ColorBotonEsperar, OnBotonEsperar);
         }
 
         /// <summary>
-        /// Helper: crea un botón UI con texto y callback asignado.
+        /// Helper: crea un botón UI con texto y callback asignado de forma robusta.
         /// </summary>
         private Button CrearBoton(string nombre, string texto, Color colorFondo,
                                   UnityEngine.Events.UnityAction callback)
@@ -627,53 +712,94 @@ namespace Felinaria.UI
             var btnObj = new GameObject(nombre);
             btnObj.transform.SetParent(_panelMenu.transform, false);
 
-            // Imagen de fondo del botón.
+            // LayoutElement para que el VerticalLayoutGroup no colapse la altura del botón
+            var layoutElement = btnObj.AddComponent<LayoutElement>();
+            layoutElement.minWidth = AnchoBoton;
+            layoutElement.preferredWidth = AnchoBoton;
+            layoutElement.minHeight = AltoBoton;
+            layoutElement.preferredHeight = AltoBoton;
+            layoutElement.flexibleWidth = 1f;
+            layoutElement.flexibleHeight = 0f;
+
+            // Imagen de fondo del botón
             var imgBtn = btnObj.AddComponent<Image>();
             imgBtn.color = colorFondo;
 
-            // Componente Button.
+            // Componente Button con estados visuales interactivos
             var btn = btnObj.AddComponent<Button>();
+            btn.targetGraphic = imgBtn;
             var colores = btn.colors;
-            colores.highlightedColor = colorFondo * 1.2f;
-            colores.pressedColor     = colorFondo * 0.8f;
+            colores.normalColor      = colorFondo;
+            colores.highlightedColor = Color.Lerp(colorFondo, Color.white, 0.35f);
+            colores.pressedColor     = Color.Lerp(colorFondo, Color.black, 0.35f);
+            colores.selectedColor    = colorFondo;
+            colores.disabledColor    = new Color(colorFondo.r * 0.4f, colorFondo.g * 0.4f, colorFondo.b * 0.4f, 0.5f);
             btn.colors = colores;
             btn.onClick.AddListener(callback);
 
-            // RectTransform con altura fija.
+            // RectTransform
             var rectBtn = btnObj.GetComponent<RectTransform>();
             rectBtn.sizeDelta = new Vector2(AnchoBoton, AltoBoton);
 
-            // Texto del botón.
+            // Texto del botón
             var txtObj = new GameObject("Texto");
             txtObj.transform.SetParent(btnObj.transform, false);
 
             var txtComponent = txtObj.AddComponent<Text>();
             txtComponent.text = texto;
             txtComponent.color = ColorTexto;
-            txtComponent.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            txtComponent.fontSize = 16;
+            txtComponent.font = ObtenerFuenteSegura();
+            txtComponent.fontSize = 15;
             txtComponent.alignment = TextAnchor.MiddleCenter;
             txtComponent.fontStyle = FontStyle.Bold;
+            txtComponent.raycastTarget = false; // No bloquea los clics al botón
+            txtComponent.horizontalOverflow = HorizontalWrapMode.Overflow;
+            txtComponent.verticalOverflow = VerticalWrapMode.Overflow;
 
-            // Estirar el texto para que ocupe todo el botón.
+            // RectTransform del texto ajustado al botón
             var rectTxt = txtObj.GetComponent<RectTransform>();
             rectTxt.anchorMin = Vector2.zero;
             rectTxt.anchorMax = Vector2.one;
-            rectTxt.offsetMin = Vector2.zero;
-            rectTxt.offsetMax = Vector2.zero;
+            rectTxt.offsetMin = new Vector2(4f, 2f);
+            rectTxt.offsetMax = new Vector2(-4f, -2f);
 
             return btn;
         }
 
-        // ── Clic derecho / Escape para cancelar ───────────────────────────────
+        /// <summary>
+        /// Helper para obtener una fuente legible compatible con cualquier versión de Unity.
+        /// </summary>
+        private Font ObtenerFuenteSegura()
+        {
+            Font fuente = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (fuente == null)
+                fuente = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (fuente == null)
+            {
+                var fuentes = Resources.FindObjectsOfTypeAll<Font>();
+                if (fuentes != null && fuentes.Length > 0)
+                    fuente = fuentes[0];
+            }
+            if (fuente == null)
+            {
+                try
+                {
+                    fuente = Font.CreateDynamicFontFromOSFont("Arial", 15);
+                }
+                catch { }
+            }
+            return fuente;
+        }
+
+        // ── Escape para cancelar ───────────────────────────────────────────────
         private void LateUpdate()
         {
-            // Permitir cancelar cualquier modo con clic derecho o Escape.
-            if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
+            // Permitir cancelar cualquier modo con Escape
+            if (Input.GetKeyDown(KeyCode.Escape))
             {
                 if (ModoActual != ModoInteraccion.Seleccion)
                 {
-                    Debug.Log("[ActionMenu] Acción cancelada.");
+                    Debug.Log("[ActionMenu] Acción cancelada con Escape.");
                     CerrarMenu();
                 }
             }
