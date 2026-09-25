@@ -258,7 +258,14 @@ namespace Felinaria.Managers
         public void ReiniciarBatalla()
         {
             Debug.Log("[BattleManager] Reiniciando nivel actual...");
-            SceneTransition.Instancia?.ReiniciarNivelActual(0.5f);
+            if (Grid.MapLoader.InstanciaExiste)
+            {
+                Grid.MapLoader.Instancia.RecargarBatallaActual();
+            }
+            else
+            {
+                SceneTransition.Instancia?.ReiniciarNivelActual(0.5f);
+            }
         }
 
         /// <summary>
@@ -266,9 +273,17 @@ namespace Felinaria.Managers
         /// </summary>
         public void AvanzarSiguienteNivel(string nombreEscena = null)
         {
-            string destino = !string.IsNullOrEmpty(nombreEscena) ? nombreEscena : "Nivel1";
-            Debug.Log($"[BattleManager] Avanzando al siguiente nivel: '{destino}'");
-            SceneTransition.Instancia?.CargarEscena(destino, 0.5f);
+            if (Grid.MapLoader.InstanciaExiste)
+            {
+                Debug.Log("[BattleManager] Avanzando a la siguiente batalla con MapLoader...");
+                Grid.MapLoader.Instancia.CargarSiguienteBatalla();
+            }
+            else
+            {
+                string destino = !string.IsNullOrEmpty(nombreEscena) ? nombreEscena : "Nivel1";
+                Debug.Log($"[BattleManager] Avanzando al siguiente nivel: '{destino}'");
+                SceneTransition.Instancia?.CargarEscena(destino, 0.5f);
+            }
         }
     }
 }

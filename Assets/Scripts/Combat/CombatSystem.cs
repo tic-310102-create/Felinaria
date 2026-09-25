@@ -194,10 +194,26 @@ namespace Felinaria.Combat
         /// </summary>
         public int CalcularDanio(UnitController atacante, UnitController objetivo)
         {
-            int danioBase = atacante.Ataque - objetivo.Defensa;
+            int defTerreno = 0;
+            if (GridManager.Instancia != null && objetivo != null)
+            {
+                var terreno = GridManager.Instancia.ObtenerTileData(objetivo.Coordenada);
+                if (terreno != null)
+                {
+                    defTerreno = terreno.BonusDefensa;
+                }
+            }
+
+            int defensaTotal = objetivo.Defensa + defTerreno;
+            int danioBase = atacante.Ataque - defensaTotal;
             int danioFinal = Mathf.Max(DanioMinimo, danioBase);
 
-            Debug.Log($"[CombatSystem] Cálculo: {atacante.Ataque} ATK - {objetivo.Defensa} DEF = " +
+            if (defTerreno != 0)
+            {
+                Debug.Log($"[CombatSystem] Defensor '{objetivo.NombreUnidad}' en {objetivo.Coordenada} tiene bono de cobertura +{defTerreno} DEF. Defensa total: {defensaTotal}");
+            }
+
+            Debug.Log($"[CombatSystem] Cálculo: {atacante.Ataque} ATK - {defensaTotal} DEF (Base {objetivo.Defensa} + Terreno {defTerreno}) = " +
                       $"{danioBase} → final: {danioFinal}");
 
             return danioFinal;

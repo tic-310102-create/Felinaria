@@ -504,6 +504,19 @@ namespace Felinaria.Grid
             => ObtenerTileData(coord.x, coord.y);
 
         /// <summary>
+        /// Reconstruye la cuadrícula con nuevas dimensiones en tiempo de ejecución.
+        /// Usado por MapLoader para cargar batallas dinámicas.
+        /// </summary>
+        public void ReconstruirCuadricula(int columnas, int filas, float tamanioCelda = 1f)
+        {
+            Columnas = columnas;
+            Filas = filas;
+            TamanioCelda = tamanioCelda;
+            AsignacionesTerreno.Clear();
+            GenerarCuadricula();
+        }
+
+        /// <summary>
         /// Asigna un TileData a una celda específica.
         /// Puede llamarse en runtime para modificar el terreno dinámicamente.
         /// </summary>
@@ -518,11 +531,20 @@ namespace Felinaria.Grid
             celda.Terreno = terreno;
 
             // Actualizar visual si el terreno tiene color propio.
-            if (terreno != null && terreno.AplicarColor && celda.Objeto != null)
+            if (celda.Objeto != null)
             {
                 var sr = celda.Objeto.GetComponent<SpriteRenderer>();
                 if (sr != null)
-                    sr.color = terreno.ColorTerreno;
+                {
+                    if (terreno != null && terreno.AplicarColor)
+                    {
+                        sr.color = terreno.ColorTerreno;
+                    }
+                    else
+                    {
+                        sr.color = ((col + row) % 2 == 0) ? ColorCeldaPar : ColorCeldaImpar;
+                    }
+                }
             }
 
             Debug.Log($"[GridManager] Terreno '{terreno?.NombreTerreno}' asignado a ({col},{row}).");

@@ -387,19 +387,24 @@ namespace Felinaria.Units
                 return false;
             }
 
-            // ── Validación 5: ¿La celda destino está libre? ───────────────────
+            // ── Validación 5: ¿La celda destino es transitable y está libre? ─────────
+            if (!GridManager.Instancia.EsCeldaTransitable(col, fila))
+            {
+                Debug.Log($"[UnitController] '{NombreUnidad}': Celda ({col},{fila}) es intransitable (Obstáculo/Agua).");
+                return false;
+            }
+
             if (!GridManager.Instancia.EstaCeldaLibre(col, fila))
             {
                 Debug.Log($"[UnitController] '{NombreUnidad}': Celda ({col},{fila}) está ocupada.");
                 return false;
             }
 
-            // ── Validación 6: ¿Está dentro del rango de movimiento? ───────────
-            int distancia = CalcularDistanciaManhattan(Coordenada, new Vector2Int(col, fila));
-            if (distancia > RangoMovimiento)
+            // ── Validación 6: ¿Hay una ruta navegable dentro del rango de movimiento? ──
+            var ruta = Felinaria.AI.Pathfinding.BuscarRutaConRango(Coordenada, new Vector2Int(col, fila), RangoMovimiento);
+            if (ruta.Count == 0 || ruta[ruta.Count - 1] != new Vector2Int(col, fila))
             {
-                Debug.Log($"[UnitController] '{NombreUnidad}': Destino a distancia {distancia}, " +
-                          $"rango máximo {RangoMovimiento}.");
+                Debug.Log($"[UnitController] '{NombreUnidad}': No se puede alcanzar ({col},{fila}) con rango {RangoMovimiento} considerando obstáculos y costos de terreno.");
                 return false;
             }
 
@@ -409,54 +414,52 @@ namespace Felinaria.Units
                 Felinaria.UI.ActionMenu.Instancia.CerrarMenu();
             }
 
-            _corrutinaMover = StartCoroutine(DesplazarACelda(col, fila));
+            _corrutinaMover = StartCoroutine(DesplazarPorRuta(ruta));
             return true;
         }
 
         /// <summary>
-        /// Coroutine que desplaza suavemente la unidad hasta la celda destino
-        /// usando Vector3.MoveTowards (sin teletransporte).
+        /// Coroutine que desplaza suavemente la unidad paso a paso por la ruta
+        /// calculada por Pathfinding respetando obstáculos y terrenos.
         /// </summary>
-        private IEnumerator DesplazarACelda(int colDestino, int filaDestino)
+        private IEnumerator DesplazarPorRuta(System.Collections.Generic.List<Vector2Int> ruta)
         {
             EstaMoviendose = true;
 
             // Liberar la celda actual en el GridManager.
             GridManager.Instancia.SetOcupacion(Coordenada.x, Coordenada.y, false);
 
-            // Calcular posición de destino en el mundo.
-            Vector3 posDestino = GridManager.Instancia.CoordenadaAMundo(colDestino, filaDestino);
+            Vector2Int destinoFinal = ruta[ruta.Count - 1];
 
-            // Actualizar la coordenada lógica antes de moverse
-            // (otras unidades sabrán que esta celda pronto estará ocupada).
-            Coordenada = new Vector2Int(colDestino, filaDestino);
-            ColInicial = colDestino;
-            FilaInicial = filaDestino;
-            GridManager.Instancia.SetOcupacion(colDestino, filaDestino, true);
-
-            // ── Bucle de interpolación ──────────────────────────────────────────
-            // MoveTowards avanza la posición actual hacia el destino un máximo
-            // de (VelocidadMovimiento * deltaTime) unidades por frame.
-            while (Vector3.Distance(transform.position, posDestino) > 0.001f)
+            // Desplazarse secuencialmente por cada celda de la ruta
+            foreach (var paso in ruta)
             {
-                transform.position = Vector3.MoveTowards(
-                    transform.position,
-                    posDestino,
-                    VelocidadMovimiento * Time.deltaTime
-                );
-                yield return null;  // Espera al siguiente frame.
+                Vector3 posPaso = GridManager.Instancia.CoordenadaAMundo(paso.x, paso.y);
+                while (Vector3.Distance(transform.position, posPaso) > 0.001f)
+                {
+                    transform.position = Vector3.MoveTowards(
+                        transform.position,
+                        posPaso,
+                        VelocidadMovimiento * Time.deltaTime
+                    );
+                    yield return null;
+                }
+                transform.position = posPaso;
+                Coordenada = paso;
             }
 
-            // Snappear al centro exacto de la celda al terminar.
-            transform.position = posDestino;
-            ColInicial = colDestino;
-            FilaInicial = filaDestino;
-            Coordenada = new Vector2Int(colDestino, filaDestino);
+            // Snappear al centro exacto de la celda de destino
+            Vector3 posFinal = GridManager.Instancia.CoordenadaAMundo(destinoFinal);
+            transform.position = posFinal;
+            ColInicial = destinoFinal.x;
+            FilaInicial = destinoFinal.y;
+            Coordenada = destinoFinal;
+            GridManager.Instancia.SetOcupacion(destinoFinal.x, destinoFinal.y, true);
 
             EstaMoviendose = false;
             MarcarComoUsada();
 
-            Debug.Log($"[UnitController] '{NombreUnidad}' llegó a ({colDestino},{filaDestino}).");
+            Debug.Log($"[UnitController] '{NombreUnidad}' llegó a ({destinoFinal.x},{destinoFinal.y}).");
         }
 
         // ── Estado de turno ────────────────────────────────────────────────────

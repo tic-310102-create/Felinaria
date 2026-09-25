@@ -698,30 +698,23 @@ namespace Felinaria.UI
             int rango = UnidadSeleccionada.RangoMovimiento;
             var coord = UnidadSeleccionada.Coordenada;
 
-            // Recorrer todas las celdas dentro del rango Manhattan.
-            for (int dx = -rango; dx <= rango; dx++)
+            // Obtener celdas realmente alcanzables respetando costos de terreno y obstáculos con Pathfinding
+            var alcanzables = Felinaria.AI.Pathfinding.ObtenerCeldasAlcanzables(coord, rango);
+
+            foreach (var pos in alcanzables)
             {
-                for (int dy = -rango; dy <= rango; dy++)
+                if (pos == coord) continue;
+
+                var celda = GridManager.Instancia.ObtenerCelda(pos.x, pos.y);
+                if (celda?.Objeto != null)
                 {
-                    if (Mathf.Abs(dx) + Mathf.Abs(dy) > rango) continue;
-                    if (dx == 0 && dy == 0) continue;
-
-                    int col = coord.x + dx;
-                    int fila = coord.y + dy;
-
-                    if (GridManager.Instancia.EstaCeldaLibre(col, fila))
+                    var sr = celda.Objeto.GetComponent<SpriteRenderer>();
+                    if (sr != null)
                     {
-                        var celda = GridManager.Instancia.ObtenerCelda(col, fila);
-                        if (celda?.Objeto != null)
-                        {
-                            var sr = celda.Objeto.GetComponent<SpriteRenderer>();
-                            if (sr != null)
-                            {
-                                _coloresOriginales[sr] = sr.color;
-                                sr.color = ColorResaltadoMover;
-                                _celdasResaltadas.Add(sr);
-                            }
-                        }
+                        if (!_coloresOriginales.ContainsKey(sr))
+                            _coloresOriginales[sr] = sr.color;
+                        sr.color = ColorResaltadoMover;
+                        _celdasResaltadas.Add(sr);
                     }
                 }
             }

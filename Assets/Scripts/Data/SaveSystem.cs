@@ -164,6 +164,18 @@ namespace Felinaria.Data
         {
             if (datos == null) return;
 
+            // 0. Si hay MapLoader y el nivel guardado difiere o la cantidad de unidades en escena no coincide, reconstruir el mapa base
+            if (datos.NivelCampania > 0 && Grid.MapLoader.InstanciaExiste)
+            {
+                var unidadesEnEscenaPrevia = UnityEngine.Object.FindObjectsByType<UnitController>(FindObjectsSortMode.None);
+                int cantGuardada = datos.Unidades != null ? datos.Unidades.Count : 0;
+                if (Grid.MapLoader.Instancia.BatallaActualIndex != datos.NivelCampania || unidadesEnEscenaPrevia.Length != cantGuardada)
+                {
+                    Debug.Log($"[SaveSystem] Reconstruyendo Batalla {datos.NivelCampania} con MapLoader para cargar estado...");
+                    Grid.MapLoader.Instancia.CargarBatalla(datos.NivelCampania, iniciarCombate: false);
+                }
+            }
+
             // 1. Limpiar ocupación previa en el GridManager
             if (GridManager.Instancia != null)
             {
@@ -330,8 +342,12 @@ namespace Felinaria.Data
             datos.FechaGuardado = DateTime.Now.ToString("o");
             datos.VersionEsquema = VERSION_ESQUEMA;
 
-            // ── Escena activa ──────────────────────────────────────────────────
+            // ── Escena activa y Nivel de Campaña ──────────────────────────────
             datos.NombreEscena = SceneManager.GetActiveScene().name;
+            if (Grid.MapLoader.InstanciaExiste)
+            {
+                datos.NivelCampania = Grid.MapLoader.Instancia.BatallaActualIndex;
+            }
 
             // ── TurnManager y Unidades ──────────────────────────────────────────
             var unidadesRecolectadas = new HashSet<UnitController>();

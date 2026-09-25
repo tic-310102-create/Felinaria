@@ -172,10 +172,25 @@ namespace Felinaria.UI
                 ObtenerTextoEstadisticas(),
                 "Siguiente Batalla",
                 new Color(0.2f, 0.72f, 0.35f),
-                () => BattleManager.Instancia?.AvanzarSiguienteNivel(),
+                () =>
+                {
+                    if (_modalVictoria != null) _modalVictoria.SetActive(false);
+                    if (Grid.MapLoader.InstanciaExiste)
+                    {
+                        Grid.MapLoader.Instancia.CargarSiguienteBatalla();
+                    }
+                    else
+                    {
+                        BattleManager.Instancia?.AvanzarSiguienteNivel();
+                    }
+                },
                 "Reintentar Batalla",
                 new Color(0.25f, 0.5f, 0.85f),
-                () => BattleManager.Instancia?.ReiniciarBatalla()
+                () =>
+                {
+                    if (_modalVictoria != null) _modalVictoria.SetActive(false);
+                    BattleManager.Instancia?.ReiniciarBatalla();
+                }
             );
         }
 
@@ -195,12 +210,16 @@ namespace Felinaria.UI
                 "Tus guardianes no lograron resistir el embate.",
                 "Reintentar Batalla",
                 new Color(0.8f, 0.25f, 0.25f),
-                () => BattleManager.Instancia?.ReiniciarBatalla(),
+                () =>
+                {
+                    if (_modalDerrota != null) _modalDerrota.SetActive(false);
+                    BattleManager.Instancia?.ReiniciarBatalla();
+                },
                 "Cargar Partida (F9)",
                 new Color(0.3f, 0.5f, 0.9f),
                 () =>
                 {
-                    _modalDerrota.SetActive(false);
+                    if (_modalDerrota != null) _modalDerrota.SetActive(false);
                     SaveSystem.CargarPartida();
                     BattleManager.Instancia?.VerificarCondicionesFinDeBatalla();
                 }
