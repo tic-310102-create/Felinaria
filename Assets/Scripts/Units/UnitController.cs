@@ -533,7 +533,17 @@ namespace Felinaria.Units
         private void Morir()
         {
             Debug.Log($"[UnitController] '{NombreUnidad}' ha sido derrotado.");
-            GridManager.Instancia.SetOcupacion(Coordenada.x, Coordenada.y, false);
+            if (GridManager.Instancia != null)
+            {
+                GridManager.Instancia.SetOcupacion(Coordenada.x, Coordenada.y, false);
+            }
+
+            // Notificar al BattleManager para verificar fin de combate (Victoria / Derrota)
+            if (Felinaria.Managers.BattleManager.Instancia != null)
+            {
+                Felinaria.Managers.BattleManager.Instancia.Invoke("VerificarCondicionesFinDeBatalla", 0.25f);
+            }
+
             Destroy(gameObject);
         }
 
