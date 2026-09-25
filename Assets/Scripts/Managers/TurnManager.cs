@@ -1,7 +1,7 @@
 // ============================================================
 //  TurnManager.cs
 //  Felinaria: El último presagio
-//  Fase 1 – Prototipo Graybox
+//  Fase 3 – IA Enemiga y Mapa (actualizado)
 //
 //  RESPONSABILIDAD:
 //    - Define la máquina de estados de turnos del juego.
@@ -164,8 +164,10 @@ namespace Felinaria.Managers
                 case EstadoTurno.TurnoJugador:
                     // Pasa al turno del enemigo.
                     CambiarEstado(EstadoTurno.TurnoEnemigo);
-                    // Simular turno enemigo automáticamente tras un retardo.
-                    StartCoroutine(EjecutarTurnoEnemigo());
+                    // Fase 3: el EnemyAI se activa automáticamente por evento OnCambioTurno.
+                    // Fallback: si no hay EnemyAI, usar el stub original.
+                    if (FindObjectOfType<Felinaria.AI.EnemyAI>() == null)
+                        StartCoroutine(EjecutarTurnoEnemigoFallback());
                     break;
 
                 case EstadoTurno.TurnoEnemigo:
@@ -190,19 +192,18 @@ namespace Felinaria.Managers
             OnCambioTurno?.Invoke(nuevoEstado);
         }
 
-        // ── Turno del Enemigo (IA stub) ────────────────────────────────────────
+        // ── Turno del Enemigo (Fallback sin EnemyAI) ─────────────────────────
         /// <summary>
-        /// Simula el turno enemigo: espera el retardo configurado
-        /// y luego termina el turno del enemigo automáticamente.
-        /// En Fase 3 aquí irá la lógica de IA real.
+        /// Fallback: si no existe EnemyAI en la escena, usa este stub.
+        /// Cuando EnemyAI está presente, se activa por el evento OnCambioTurno
+        /// y llama a TerminarTurnoActual() al finalizar.
         /// </summary>
-        private System.Collections.IEnumerator EjecutarTurnoEnemigo()
+        private System.Collections.IEnumerator EjecutarTurnoEnemigoFallback()
         {
-            Debug.Log($"[TurnManager] Enemigo pensando... ({RetardoTurnoEnemigo}s)");
+            Debug.Log($"[TurnManager] Enemigo pensando (fallback)... ({RetardoTurnoEnemigo}s)");
             yield return new WaitForSeconds(RetardoTurnoEnemigo);
 
-            // TODO Fase 3: aquí la IA moverá sus unidades antes de llamar a esto.
-            Debug.Log("[TurnManager] Turno enemigo terminado (IA stub).");
+            Debug.Log("[TurnManager] Turno enemigo terminado (fallback sin EnemyAI).");
             TerminarTurnoActual();
         }
 

@@ -1,7 +1,7 @@
 // ============================================================
 //  UnitController.cs
 //  Felinaria: El último presagio
-//  Fase 2 – Combate y Stats (actualizado)
+//  Fase 3 – IA Enemiga y Mapa (actualizado)
 //
 //  RESPONSABILIDAD:
 //    - Representa a cualquier unidad en el tablero (héroe o enemigo).
@@ -367,6 +367,17 @@ namespace Felinaria.Units
             Debug.Log($"[UnitController] '{NombreUnidad}' ha sido derrotado.");
             GridManager.Instancia.SetOcupacion(Coordenada.x, Coordenada.y, false);
             Destroy(gameObject);
+        }
+
+        // ── API para IA (Fase 3) ───────────────────────────────────────────────
+        /// <summary>
+        /// Actualiza la coordenada lógica de la unidad directamente.
+        /// SOLO para uso de EnemyAI, que mueve las unidades celda a celda
+        /// sin pasar por las validaciones de MoverACelda().
+        /// </summary>
+        public void SetCoordenadaDirecta(Vector2Int nuevaCoordenada)
+        {
+            Coordenada = nuevaCoordenada;
         }
 
         // ── Utilidades ─────────────────────────────────────────────────────────

@@ -1,18 +1,19 @@
 // ============================================================
 //  GridManager.cs
 //  Felinaria: El último presagio
-//  Fase 1 – Prototipo Graybox
+//  Fase 3 – IA Enemiga y Mapa (actualizado)
 //
 //  RESPONSABILIDAD:
 //    - Genera la cuadrícula táctica 2D en tiempo de ejecución.
 //    - Convierte coordenadas de mundo <-> coordenadas de celda (col, fila).
 //    - Registra qué celdas están ocupadas por unidades.
+//    - Almacena TileData (tipo de terreno) por celda (Fase 3).
 //    - Expone helpers para consultar celdas vecinas (movimiento).
 //
-//  CÓMO FUNCIONA (resumen para principiantes):
-//    Crea una matrix de objetos "Cell" en forma de cuadrícula.
-//    Cada celda es un prefab genérico (cuadro blanco/gris).
-//    Guarda en un diccionario si la celda tiene o no una unidad encima.
+//  CAMBIOS FASE 3:
+//    - Cell ahora tiene un campo TileData para terreno.
+//    - API ObtenerTileData() y AsignarTileData() para Pathfinding/CombatSystem.
+//    - Lista de obstáculos configurables desde el Inspector.
 // ============================================================
 
 using System.Collections.Generic;
@@ -42,6 +43,9 @@ namespace Felinaria.Grid
         /// <summary>Referencia al GameObject visual de la celda.</summary>
         public GameObject Objeto;
 
+        /// <summary>Tipo de terreno asignado a esta celda (Fase 3). Puede ser null (llanura por defecto).</summary>
+        public TileData Terreno;
+
         public Cell(int col, int row, Vector3 worldPos, GameObject obj)
         {
             Col           = col;
@@ -49,6 +53,7 @@ namespace Felinaria.Grid
             WorldPosition = worldPos;
             EstaOcupada   = false;
             Objeto        = obj;
+            Terreno       = null;
         }
     }
 
@@ -85,6 +90,15 @@ namespace Felinaria.Grid
 
         [Tooltip("Posición en el mundo donde comienza la esquina inferior-izquierda.")]
         public Vector3 OrigenMundo = Vector3.zero;
+
+        [Header("Terreno y Obstáculos (Fase 3)")]
+        [Tooltip("TileData por defecto para todas las celdas que no tengan " +
+                 "un terreno específico asignado. Dejar vacío = llanura.")]
+        public TileData TerrenoDefault;
+
+        [Tooltip("Lista de asignaciones de terreno. Cada elemento define " +
+                 "una coordenada y qué TileData tiene esa celda.")]
+        public List<AsignacionTerreno> AsignacionesTerreno = new List<AsignacionTerreno>();
 
         // ── Singleton ──────────────────────────────────────────────────────────
         /// <summary>Acceso global al GridManager desde cualquier script.</summary>
@@ -138,6 +152,9 @@ namespace Felinaria.Grid
                     CrearCelda(col, row);
                 }
             }
+
+            // Aplicar terrenos configurados desde el Inspector (Fase 3).
+            AplicarTerrenosDesdeInspector();
 
             Debug.Log($"[GridManager] Cuadrícula generada: {Columnas}x{Filas} = {Columnas * Filas} celdas.");
         }
@@ -331,6 +348,80 @@ namespace Felinaria.Grid
             return vecinos;
         }
 
+        // ── API de Terreno (Fase 3) ────────────────────────────────────────────
+
+        /// <summary>
+        /// Devuelve el TileData (tipo de terreno) de una celda.
+        /// Retorna TerrenoDefault si la celda no tiene terreno específico.
+        /// Retorna null si no hay ni específico ni default.
+        /// </summary>
+        public TileData ObtenerTileData(int col, int row)
+        {
+            var celda = ObtenerCelda(col, row);
+            if (celda == null) return null;
+            return celda.Terreno ?? TerrenoDefault;
+        }
+
+        /// <summary>
+        /// Devuelve el TileData (tipo de terreno) de una celda.
+        /// </summary>
+        public TileData ObtenerTileData(Vector2Int coord)
+            => ObtenerTileData(coord.x, coord.y);
+
+        /// <summary>
+        /// Asigna un TileData a una celda específica.
+        /// Puede llamarse en runtime para modificar el terreno dinámicamente.
+        /// </summary>
+        public void AsignarTileData(int col, int row, TileData terreno)
+        {
+            var celda = ObtenerCelda(col, row);
+            if (celda == null)
+            {
+                Debug.LogWarning($"[GridManager] AsignarTileData: celda ({col},{row}) no existe.");
+                return;
+            }
+            celda.Terreno = terreno;
+
+            // Actualizar visual si el terreno tiene color propio.
+            if (terreno != null && terreno.AplicarColor && celda.Objeto != null)
+            {
+                var sr = celda.Objeto.GetComponent<SpriteRenderer>();
+                if (sr != null)
+                    sr.color = terreno.ColorTerreno;
+            }
+
+            Debug.Log($"[GridManager] Terreno '{terreno?.NombreTerreno}' asignado a ({col},{row}).");
+        }
+
+        /// <summary>
+        /// Aplica las asignaciones de terreno configuradas desde el Inspector.
+        /// Llamado automáticamente al generar la cuadrícula.
+        /// </summary>
+        private void AplicarTerrenosDesdeInspector()
+        {
+            foreach (var asignacion in AsignacionesTerreno)
+            {
+                if (asignacion.Terreno == null) continue;
+                AsignarTileData(asignacion.Coordenada.x, asignacion.Coordenada.y, asignacion.Terreno);
+            }
+        }
+
+        /// <summary>
+        /// Indica si una celda es transitable considerando su TileData.
+        /// Una celda es transitable si: existe, su TileData lo permite
+        /// (o no tiene TileData asignado) y no está ocupada.
+        /// </summary>
+        public bool EsCeldaTransitable(int col, int row)
+        {
+            var celda = ObtenerCelda(col, row);
+            if (celda == null) return false;
+
+            var terreno = ObtenerTileData(col, row);
+            if (terreno != null && !terreno.EsTransitable) return false;
+
+            return true;
+        }
+
         // ── Depuración visual ──────────────────────────────────────────────────
         // OnDrawGizmos se ejecuta en el Editor aunque el juego no esté en Play.
         private void OnDrawGizmos()
@@ -353,5 +444,19 @@ namespace Felinaria.Grid
                 Gizmos.DrawLine(inicio, fin);
             }
         }
+    }
+
+    // ─── Estructura para asignar terreno desde el Inspector ──────────────────
+    /// <summary>
+    /// Par coordenada-terreno para configurar el mapa desde el Inspector.
+    /// </summary>
+    [System.Serializable]
+    public struct AsignacionTerreno
+    {
+        [Tooltip("Coordenada (col, fila) de la celda.")]
+        public Vector2Int Coordenada;
+
+        [Tooltip("TileData que se aplica a esta celda.")]
+        public TileData Terreno;
     }
 }
