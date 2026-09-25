@@ -104,6 +104,8 @@ namespace Felinaria.Managers
             }
         }
 
+        private bool _finalizandoBatalla = false;
+
         // ── Monitoreo de Combate ───────────────────────────────────────────────
         private void OnAtaqueRealizado(ResultadoCombate res)
         {
@@ -122,16 +124,18 @@ namespace Felinaria.Managers
                     BajasAliadas++;
             }
 
-            // Verificar condiciones de victoria o derrota con breve retardo para permitir animaciones
-            Invoke(nameof(VerificarCondicionesFinDeBatalla), 0.35f);
+            // Verificar condiciones de victoria o derrota
+            VerificarCondicionesFinDeBatalla();
         }
 
         /// <summary>
         /// Evalúa si la batalla ha concluido por victoria o derrota.
+        /// Si se detecta el fin, espera un retardo para permitir que las animaciones
+        /// de la barra de vida se vacíen a 0 y la unidad muestre su estado de caída.
         /// </summary>
         public void VerificarCondicionesFinDeBatalla()
         {
-            if (EstadoActual != EstadoBatalla.EnProgreso) return;
+            if (EstadoActual != EstadoBatalla.EnProgreso || _finalizandoBatalla) return;
 
             var unidades = FindObjectsByType<UnitController>(FindObjectsSortMode.None);
             int aliadosVivos = 0;
@@ -149,10 +153,28 @@ namespace Felinaria.Managers
             // Condición de Victoria: Todos los enemigos eliminados
             if (enemigosVivos == 0 && aliadosVivos > 0)
             {
-                DeclararVictoria();
+                _finalizandoBatalla = true;
+                StartCoroutine(RutinaDeclararFin(EstadoBatalla.Victoria, 0.9f));
             }
             // Condición de Derrota: Todas las unidades del jugador caídas
             else if (aliadosVivos == 0)
+            {
+                _finalizandoBatalla = true;
+                StartCoroutine(RutinaDeclararFin(EstadoBatalla.Derrota, 0.9f));
+            }
+        }
+
+        private System.Collections.IEnumerator RutinaDeclararFin(EstadoBatalla estado, float delaySegundos)
+        {
+            // Espera intencional para permitir que la barra de vida baje suavemente a 0
+            // y la unidad complete su transición visual antes del modal
+            yield return new WaitForSeconds(delaySegundos);
+
+            if (estado == EstadoBatalla.Victoria)
+            {
+                DeclararVictoria();
+            }
+            else if (estado == EstadoBatalla.Derrota)
             {
                 DeclararDerrota();
             }

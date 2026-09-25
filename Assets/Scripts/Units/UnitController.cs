@@ -528,7 +528,7 @@ namespace Felinaria.Units
         }
 
         /// <summary>
-        /// Maneja la eliminación de la unidad del tablero.
+        /// Maneja la eliminación de la unidad del tablero con retardo visual para animar barra de vida a 0 y estado de caída.
         /// </summary>
         private void Morir()
         {
@@ -538,11 +538,37 @@ namespace Felinaria.Units
                 GridManager.Instancia.SetOcupacion(Coordenada.x, Coordenada.y, false);
             }
 
-            // Notificar al BattleManager para verificar fin de combate (Victoria / Derrota)
+            // Deshabilitar colisionador para no interferir con otros clics
+            var col2D = GetComponent<Collider2D>();
+            if (col2D != null) col2D.enabled = false;
+
+            // Asegurar que la barra de vida actualice inmediatamente su objetivo a 0
+            var healthBar = GetComponent<Felinaria.UI.HealthBar>();
+            if (healthBar != null)
+            {
+                healthBar.ActualizarBarra();
+            }
+
+            // Notificar al BattleManager para comenzar evaluación de fin de batalla
             if (Felinaria.Managers.BattleManager.Instancia != null)
             {
-                Felinaria.Managers.BattleManager.Instancia.Invoke("VerificarCondicionesFinDeBatalla", 0.25f);
+                Felinaria.Managers.BattleManager.Instancia.VerificarCondicionesFinDeBatalla();
             }
+
+            StartCoroutine(RutinaMuerte());
+        }
+
+        private IEnumerator RutinaMuerte()
+        {
+            // Efecto visual de caída/derrota: oscurecer y desvanecer ligeramente
+            if (_spriteRenderer != null)
+            {
+                Color c = _spriteRenderer.color;
+                _spriteRenderer.color = new Color(c.r * 0.4f, c.g * 0.4f, c.b * 0.4f, 0.6f);
+            }
+
+            // Esperar retardo suficiente para que la barra de vida se vacíe a 0 visualmente
+            yield return new WaitForSeconds(0.95f);
 
             Destroy(gameObject);
         }

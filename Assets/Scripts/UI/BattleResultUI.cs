@@ -93,8 +93,19 @@ namespace Felinaria.UI
 
         private void AsegurarCanvas()
         {
-            if (CanvasPrincipal == null)
-                CanvasPrincipal = FindFirstObjectByType<Canvas>();
+            if (CanvasPrincipal == null || CanvasPrincipal.renderMode != RenderMode.ScreenSpaceOverlay || CanvasPrincipal.name == "HealthBar_Canvas")
+            {
+                CanvasPrincipal = null;
+                var canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+                foreach (var c in canvases)
+                {
+                    if (c != null && c.renderMode == RenderMode.ScreenSpaceOverlay && c.gameObject.name != "HealthBar_Canvas")
+                    {
+                        CanvasPrincipal = c;
+                        break;
+                    }
+                }
+            }
 
             if (CanvasPrincipal == null)
             {
@@ -103,13 +114,24 @@ namespace Felinaria.UI
                 CanvasPrincipal.renderMode = RenderMode.ScreenSpaceOverlay;
                 CanvasPrincipal.sortingOrder = 300; // Por encima de todo
 
-                var scaler = canvasObj.AddComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920, 1080);
-                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-                scaler.matchWidthOrHeight = 0.5f;
-
                 canvasObj.AddComponent<GraphicRaycaster>();
+            }
+
+            // Garantizar CanvasScaler a 1920x1080
+            var scaler = CanvasPrincipal.GetComponent<CanvasScaler>();
+            if (scaler == null)
+                scaler = CanvasPrincipal.gameObject.AddComponent<CanvasScaler>();
+
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0.5f;
+
+            if (FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+            {
+                var esObj = new GameObject("EventSystem");
+                esObj.AddComponent<UnityEngine.EventSystems.EventSystem>();
+                esObj.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
             }
         }
 
@@ -125,11 +147,11 @@ namespace Felinaria.UI
 
             _modalVictoria = CrearModal(
                 "¡VICTORIA EN FELINARIA!",
-                new Color(0.95f, 0.8f, 0.2f),
-                new Color(0.05f, 0.15f, 0.1f, 0.95f),
+                new Color(0.98f, 0.85f, 0.25f),
+                new Color(0.06f, 0.14f, 0.10f, 0.96f),
                 ObtenerTextoEstadisticas(),
                 "Siguiente Batalla",
-                new Color(0.2f, 0.75f, 0.35f),
+                new Color(0.2f, 0.72f, 0.35f),
                 () => BattleManager.Instancia?.AvanzarSiguienteNivel(),
                 "Reintentar Batalla",
                 new Color(0.25f, 0.5f, 0.85f),
@@ -148,8 +170,8 @@ namespace Felinaria.UI
 
             _modalDerrota = CrearModal(
                 "¡DERROTA!",
-                new Color(1f, 0.3f, 0.3f),
-                new Color(0.18f, 0.05f, 0.05f, 0.95f),
+                new Color(1f, 0.32f, 0.32f),
+                new Color(0.16f, 0.05f, 0.05f, 0.96f),
                 "Tus guardianes no lograron resistir el embate.",
                 "Reintentar Batalla",
                 new Color(0.8f, 0.25f, 0.25f),
@@ -186,12 +208,13 @@ namespace Felinaria.UI
             string txtBtn1, Color colorBtn1, UnityEngine.Events.UnityAction cb1,
             string txtBtn2, Color colorBtn2, UnityEngine.Events.UnityAction cb2)
         {
-            // Panel oscurecedor de fondo (bloquea clics en el juego)
+            // Panel oscurecedor de fondo a pantalla completa
             var bloqueadorObj = new GameObject($"Modal_{titulo}");
             bloqueadorObj.transform.SetParent(CanvasPrincipal.transform, false);
+            bloqueadorObj.transform.localScale = Vector3.one;
 
             var bloqueadorImg = bloqueadorObj.AddComponent<Image>();
-            bloqueadorImg.color = new Color(0f, 0f, 0f, 0.65f);
+            bloqueadorImg.color = new Color(0f, 0f, 0f, 0.72f);
 
             var rectBloqueador = bloqueadorObj.GetComponent<RectTransform>();
             rectBloqueador.anchorMin = Vector2.zero;
@@ -199,9 +222,10 @@ namespace Felinaria.UI
             rectBloqueador.offsetMin = Vector2.zero;
             rectBloqueador.offsetMax = Vector2.zero;
 
-            // Caja central del modal
+            // Caja central del modal delimitada (640x440 px)
             var cajaObj = new GameObject("CajaModal");
             cajaObj.transform.SetParent(bloqueadorObj.transform, false);
+            cajaObj.transform.localScale = Vector3.one;
 
             var cajaImg = cajaObj.AddComponent<Image>();
             cajaImg.color = colorFondo;
@@ -210,20 +234,21 @@ namespace Felinaria.UI
             rectCaja.anchorMin = new Vector2(0.5f, 0.5f);
             rectCaja.anchorMax = new Vector2(0.5f, 0.5f);
             rectCaja.pivot = new Vector2(0.5f, 0.5f);
-            rectCaja.sizeDelta = new Vector2(580f, 400f);
+            rectCaja.sizeDelta = new Vector2(640f, 440f);
+            rectCaja.anchoredPosition = Vector2.zero;
 
             var layout = cajaObj.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(30, 30, 30, 30);
-            layout.spacing = 18f;
+            layout.padding = new RectOffset(36, 36, 30, 30);
+            layout.spacing = 16f;
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childControlWidth = true;
             layout.childControlHeight = false;
 
-            // Título
-            CrearTextoUI(cajaObj.transform, titulo, 28, FontStyle.Bold, colorTitulo, 45f);
+            // Título centrado (tamaño de fuente 30, nítido y delimitado)
+            CrearTextoUI(cajaObj.transform, titulo, 30, FontStyle.Bold, colorTitulo, 50f);
 
-            // Subtítulo / Estadísticas
-            CrearTextoUI(cajaObj.transform, subtitulo, 17, FontStyle.Normal, new Color(0.9f, 0.9f, 0.95f), 55f);
+            // Subtítulo / Estadísticas (tamaño de fuente 18)
+            CrearTextoUI(cajaObj.transform, subtitulo, 18, FontStyle.Normal, new Color(0.92f, 0.92f, 0.95f), 60f);
 
             // Botón 1
             CrearBotonModal(cajaObj.transform, txtBtn1, colorBtn1, cb1);
@@ -238,22 +263,29 @@ namespace Felinaria.UI
         {
             var btnObj = new GameObject($"Btn_{texto}");
             btnObj.transform.SetParent(padre, false);
+            btnObj.transform.localScale = Vector3.one;
 
             var le = btnObj.AddComponent<LayoutElement>();
-            le.minWidth = 320f;
-            le.preferredWidth = 320f;
-            le.minHeight = 58f;
-            le.preferredHeight = 58f;
+            le.minWidth = 340f;
+            le.preferredWidth = 340f;
+            le.minHeight = 54f;
+            le.preferredHeight = 54f;
 
             var img = btnObj.AddComponent<Image>();
             img.color = color;
 
             var btn = btnObj.AddComponent<Button>();
             btn.targetGraphic = img;
+            var colores = btn.colors;
+            colores.normalColor = color;
+            colores.highlightedColor = Color.Lerp(color, Color.white, 0.3f);
+            colores.pressedColor = Color.Lerp(color, Color.black, 0.3f);
+            btn.colors = colores;
             btn.onClick.AddListener(callback);
 
             var txtObj = new GameObject("Texto");
             txtObj.transform.SetParent(btnObj.transform, false);
+            txtObj.transform.localScale = Vector3.one;
 
             var txt = txtObj.AddComponent<Text>();
             txt.text = texto;
@@ -279,6 +311,7 @@ namespace Felinaria.UI
         {
             var obj = new GameObject("Texto");
             obj.transform.SetParent(padre, false);
+            obj.transform.localScale = Vector3.one;
 
             var le = obj.AddComponent<LayoutElement>();
             le.minHeight = altura;

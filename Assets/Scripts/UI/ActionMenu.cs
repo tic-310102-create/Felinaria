@@ -75,16 +75,16 @@ namespace Felinaria.UI
 
         [Header("Configuración Visual del Menú")]
         [Tooltip("Desplazamiento del menú respecto a la unidad seleccionada (en píxeles).")]
-        public Vector2 OffsetMenu = new Vector2(80f, 0f);
+        public Vector2 OffsetMenu = new Vector2(100f, 0f);
 
         [Tooltip("Ancho de cada botón del menú.")]
-        public float AnchoBoton = 120f;
+        public float AnchoBoton = 180f;
 
         [Tooltip("Alto de cada botón del menú.")]
-        public float AltoBoton = 40f;
+        public float AltoBoton = 50f;
 
         [Tooltip("Espacio entre botones.")]
-        public float EspaciadoBoton = 5f;
+        public float EspaciadoBoton = 8f;
 
         [Header("Colores de los Botones")]
         [Tooltip("Color del botón Mover.")]
@@ -146,11 +146,32 @@ namespace Felinaria.UI
             _ = SaveLoadUI.Instancia;
 
             // Buscar Canvas existente en la escena o crear uno automático
-            if (CanvasPrincipal == null)
+            if (CanvasPrincipal == null || CanvasPrincipal.renderMode != RenderMode.ScreenSpaceOverlay || CanvasPrincipal.name == "HealthBar_Canvas")
             {
-                CanvasPrincipal = FindFirstObjectByType<Canvas>();
+                CanvasPrincipal = null;
+                var canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+                foreach (var c in canvases)
+                {
+                    if (c != null && c.renderMode == RenderMode.ScreenSpaceOverlay && c.gameObject.name != "HealthBar_Canvas")
+                    {
+                        CanvasPrincipal = c;
+                        break;
+                    }
+                }
                 if (CanvasPrincipal == null)
                     CrearCanvasAutomatico();
+            }
+
+            if (CanvasPrincipal != null)
+            {
+                var scaler = CanvasPrincipal.GetComponent<CanvasScaler>();
+                if (scaler == null)
+                    scaler = CanvasPrincipal.gameObject.AddComponent<CanvasScaler>();
+
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920, 1080);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+                scaler.matchWidthOrHeight = 0.5f;
             }
 
             CrearMenuUI();
@@ -679,17 +700,18 @@ namespace Felinaria.UI
             // ── Panel contenedor ──────────────────────────────────────────────
             _panelMenu = new GameObject("Panel_ActionMenu");
             _panelMenu.transform.SetParent(CanvasPrincipal.transform, false);
+            _panelMenu.transform.localScale = Vector3.one;
 
             var panelImg = _panelMenu.AddComponent<Image>();
-            panelImg.color = new Color(0.12f, 0.12f, 0.18f, 0.95f); // Fondo oscuro elegante
+            panelImg.color = new Color(0.10f, 0.10f, 0.16f, 0.96f); // Fondo oscuro elegante y nítido
 
             var rectPanel = _panelMenu.GetComponent<RectTransform>();
             rectPanel.pivot = new Vector2(0f, 0.5f);
-            rectPanel.sizeDelta = new Vector2(AnchoBoton + 24f, (AltoBoton * 3) + (EspaciadoBoton * 4) + 16f);
+            rectPanel.sizeDelta = new Vector2(AnchoBoton + 28f, (AltoBoton * 3) + (EspaciadoBoton * 4) + 24f);
 
             // Layout vertical automático
             var layout = _panelMenu.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(10, 10, 8, 8);
+            layout.padding = new RectOffset(12, 12, 12, 12);
             layout.spacing = EspaciadoBoton;
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childControlWidth = true;
@@ -712,13 +734,14 @@ namespace Felinaria.UI
         }
 
         /// <summary>
-        /// Helper: crea un botón UI con texto y callback asignado de forma robusta.
+        /// Helper: crea un botón UI con texto y callback asignado de forma robusta y nítida.
         /// </summary>
         private Button CrearBoton(string nombre, string texto, Color colorFondo,
                                   UnityEngine.Events.UnityAction callback)
         {
             var btnObj = new GameObject(nombre);
             btnObj.transform.SetParent(_panelMenu.transform, false);
+            btnObj.transform.localScale = Vector3.one;
 
             // LayoutElement para que el VerticalLayoutGroup no colapse la altura del botón
             var layoutElement = btnObj.AddComponent<LayoutElement>();
@@ -752,12 +775,13 @@ namespace Felinaria.UI
             // Texto del botón
             var txtObj = new GameObject("Texto");
             txtObj.transform.SetParent(btnObj.transform, false);
+            txtObj.transform.localScale = Vector3.one;
 
             var txtComponent = txtObj.AddComponent<Text>();
             txtComponent.text = texto;
             txtComponent.color = ColorTexto;
             txtComponent.font = ObtenerFuenteSegura();
-            txtComponent.fontSize = 15;
+            txtComponent.fontSize = 18;
             txtComponent.alignment = TextAnchor.MiddleCenter;
             txtComponent.fontStyle = FontStyle.Bold;
             txtComponent.raycastTarget = false; // No bloquea los clics al botón
@@ -768,8 +792,8 @@ namespace Felinaria.UI
             var rectTxt = txtObj.GetComponent<RectTransform>();
             rectTxt.anchorMin = Vector2.zero;
             rectTxt.anchorMax = Vector2.one;
-            rectTxt.offsetMin = new Vector2(4f, 2f);
-            rectTxt.offsetMax = new Vector2(-4f, -2f);
+            rectTxt.offsetMin = new Vector2(8f, 4f);
+            rectTxt.offsetMax = new Vector2(-8f, -4f);
 
             return btn;
         }
