@@ -29,7 +29,24 @@ namespace Felinaria.Audio
     public class AudioManager : MonoBehaviour
     {
         // ── Singleton ──────────────────────────────────────────────────────────
-        public static AudioManager Instancia { get; private set; }
+        private static AudioManager _instancia;
+        public static AudioManager Instancia
+        {
+            get
+            {
+                if (_instancia == null)
+                {
+                    _instancia = FindFirstObjectByType<AudioManager>();
+                    if (_instancia == null)
+                    {
+                        var go = new GameObject("AudioManager_Auto");
+                        _instancia = go.AddComponent<AudioManager>();
+                    }
+                }
+                return _instancia;
+            }
+            private set => _instancia = value;
+        }
 
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("Música de Fondo (BGM)")]
@@ -91,13 +108,13 @@ namespace Felinaria.Audio
         private void Awake()
         {
             // Singleton con persistencia entre escenas.
-            if (Instancia != null && Instancia != this)
+            if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[AudioManager] Ya existe una instancia. Destruyendo duplicado.");
                 Destroy(gameObject);
                 return;
             }
-            Instancia = this;
+            _instancia = this;
             DontDestroyOnLoad(gameObject);
 
             // Crear los AudioSource necesarios.

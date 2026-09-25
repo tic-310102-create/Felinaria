@@ -51,7 +51,24 @@ namespace Felinaria.AI
     public class EnemyAI : MonoBehaviour
     {
         // ── Singleton ──────────────────────────────────────────────────────────
-        public static EnemyAI Instancia { get; private set; }
+        private static EnemyAI _instancia;
+        public static EnemyAI Instancia
+        {
+            get
+            {
+                if (_instancia == null)
+                {
+                    _instancia = FindFirstObjectByType<EnemyAI>();
+                    if (_instancia == null)
+                    {
+                        var go = new GameObject("EnemyAI_Auto");
+                        _instancia = go.AddComponent<EnemyAI>();
+                    }
+                }
+                return _instancia;
+            }
+            private set => _instancia = value;
+        }
 
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("Configuración de la IA")]
@@ -77,29 +94,77 @@ namespace Felinaria.AI
         /// <summary>True mientras la IA está procesando el turno enemigo.</summary>
         public bool EstaProcesando { get; private set; }
 
+        private bool _suscrito = false;
+
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
-            if (Instancia != null && Instancia != this)
+            if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[EnemyAI] Ya existe una instancia. Destruyendo duplicado.");
                 Destroy(gameObject);
                 return;
             }
-            Instancia = this;
+            _instancia = this;
+        }
+
+        private void Start()
+        {
+            // Suscribirse al evento de cambio de turno.
+            // Usamos Start en lugar de OnEnable para garantizar que TurnManager ya exista.
+            SuscribirseATurnManager();
+
+            // Si ya estamos en turno enemigo (ej: EnemyAI fue auto-creada durante el cambio),
+            // disparar la IA inmediatamente para no perder el evento.
+            if (_suscrito && TurnManager.Instancia != null &&
+                TurnManager.Instancia.EstadoActual == EstadoTurno.TurnoEnemigo &&
+                !EstaProcesando)
+            {
+                StartCoroutine(EjecutarTurnoEnemigo());
+            }
         }
 
         private void OnEnable()
         {
-            // Suscribirse al cambio de turno para activarse automáticamente.
-            if (TurnManager.Instancia != null)
-                TurnManager.Instancia.OnCambioTurno += OnCambioTurno;
+            // Re-suscribirse si el objeto fue desactivado y reactivado.
+            if (_suscrito) return;
+            SuscribirseATurnManager();
         }
 
         private void OnDisable()
         {
-            if (TurnManager.Instancia != null)
+            if (TurnManager.Instancia != null && _suscrito)
+            {
                 TurnManager.Instancia.OnCambioTurno -= OnCambioTurno;
+                _suscrito = false;
+            }
+        }
+
+        private void SuscribirseATurnManager()
+        {
+            if (_suscrito) return;
+            if (TurnManager.Instancia != null)
+            {
+                TurnManager.Instancia.OnCambioTurno += OnCambioTurno;
+                _suscrito = true;
+                Debug.Log("[EnemyAI] Suscrito al evento OnCambioTurno del TurnManager.");
+            }
+            else
+            {
+                // Si TurnManager aún no existe, reintentar en el siguiente frame.
+                StartCoroutine(ReintentarSuscripcion());
+            }
+        }
+
+        private System.Collections.IEnumerator ReintentarSuscripcion()
+        {
+            yield return null; // Esperar un frame
+            if (!_suscrito && TurnManager.Instancia != null)
+            {
+                TurnManager.Instancia.OnCambioTurno += OnCambioTurno;
+                _suscrito = true;
+                Debug.Log("[EnemyAI] Suscrito al evento OnCambioTurno (reintento).");
+            }
         }
 
         // ── Escucha del evento de turno ────────────────────────────────────────

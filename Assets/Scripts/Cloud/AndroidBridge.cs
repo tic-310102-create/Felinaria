@@ -37,7 +37,24 @@ namespace Felinaria.Cloud
     public class AndroidBridge : MonoBehaviour
     {
         // ── Singleton ──────────────────────────────────────────────────────────
-        public static AndroidBridge Instancia { get; private set; }
+        private static AndroidBridge _instancia;
+        public static AndroidBridge Instancia
+        {
+            get
+            {
+                if (_instancia == null)
+                {
+                    _instancia = FindFirstObjectByType<AndroidBridge>();
+                    if (_instancia == null)
+                    {
+                        var go = new GameObject("AndroidBridge_Auto");
+                        _instancia = go.AddComponent<AndroidBridge>();
+                    }
+                }
+                return _instancia;
+            }
+            private set => _instancia = value;
+        }
 
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("Configuración de Sincronización")]
@@ -61,18 +78,18 @@ namespace Felinaria.Cloud
         // ── Eventos ────────────────────────────────────────────────────────────
         /// <summary>Se dispara cuando la sincronización termina.
         /// Bool = true si fue exitosa.</summary>
-        public event Action<bool> OnSincronizacionCompletada;
+        public event System.Action<bool> OnSincronizacionCompletada;
 
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
-            if (Instancia != null && Instancia != this)
+            if (_instancia != null && _instancia != this)
             {
                 Debug.LogWarning("[AndroidBridge] Ya existe una instancia. Destruyendo duplicado.");
                 Destroy(gameObject);
                 return;
             }
-            Instancia = this;
+            _instancia = this;
         }
 
         // ── API pública ────────────────────────────────────────────────────────

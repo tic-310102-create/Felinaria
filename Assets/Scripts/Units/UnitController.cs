@@ -123,16 +123,13 @@ namespace Felinaria.Units
         // ── Unity Lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
-            _spriteRenderer = GetComponent<SpriteRenderer>();
-            _meshRenderer   = GetComponent<Renderer>();
-
             // Cargar stats desde ScriptableObject si está asignado.
             CargarDesdeScriptableObject();
 
             VidaActual = VidaMaxima;
 
-            // Asegurar que la unidad tiene un Collider 3D para detección de clics.
-            AsegurarCollider();
+            // Asegurar componentes 2D puros (SpriteRenderer, BoxCollider2D, Z=0)
+            AsegurarComponentes2D();
 
             // Auto-adjuntar HealthBar flotante si no existe
             if (GetComponent<Felinaria.UI.HealthBar>() == null)
@@ -175,18 +172,56 @@ namespace Felinaria.Units
         }
 
         /// <summary>
-        /// Asegura que la unidad tenga un Collider 3D para que
-        /// el ActionMenu pueda detectar clics con Physics.Raycast.
-        /// Si ya tiene un CapsuleCollider, BoxCollider u otro Collider 3D, lo respeta.
+        /// Asegura que la unidad utilice componentes 2D puros (BoxCollider2D y SpriteRenderer)
+        /// y elimina colisionadores o mallas 3D para evitar interferencias.
         /// </summary>
-        private void AsegurarCollider()
+        private void AsegurarComponentes2D()
         {
-            if (GetComponent<Collider>() == null)
+            // 1. Limpiar colisionadores 3D si existieran en la unidad
+            var colliders3D = GetComponents<Collider>();
+            foreach (var col3D in colliders3D)
             {
-                var col = gameObject.AddComponent<BoxCollider>();
-                col.size = new Vector3(0.8f, 0.8f, 0.8f);
-                Debug.Log($"[UnitController] '{NombreUnidad}': BoxCollider 3D añadido automáticamente.");
+                if (Application.isPlaying)
+                    Destroy(col3D);
+                else
+                    DestroyImmediate(col3D);
             }
+
+            // 2. Asegurar BoxCollider2D para detección de clics 2D
+            if (GetComponent<Collider2D>() == null)
+            {
+                var col2D = gameObject.AddComponent<BoxCollider2D>();
+                col2D.size = new Vector2(0.85f, 0.85f);
+                col2D.isTrigger = false;
+            }
+
+            // 3. Asegurar SpriteRenderer para renderizado 2D
+            _spriteRenderer = GetComponent<SpriteRenderer>();
+            if (_spriteRenderer == null)
+            {
+                // Desactivar renderers 3D si hubiera mallas 3D
+                var mr = GetComponent<MeshRenderer>();
+                if (mr != null) mr.enabled = false;
+
+                _spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
+                _spriteRenderer.sortingLayerName = "Default";
+                _spriteRenderer.sortingOrder = 2; // Por encima del tablero (order 0)
+            }
+
+            if (_spriteRenderer.sprite == null && GridManager.Instancia != null)
+            {
+                _spriteRenderer.sprite = GridManager.Instancia.GetSpriteBlanco();
+            }
+
+            // Aplicar color inicial del bando si no hay color previo
+            Color colorBando = (BandoUnidad == Bando.Jugador)
+                ? new Color(0.2f, 0.5f, 1f, 1f)
+                : new Color(1f, 0.25f, 0.25f, 1f);
+
+            AplicarColorVisual(ColorNormal != Color.white ? ColorNormal : colorBando);
+
+            // Garantizar plano Z = 0
+            transform.position = new Vector3(transform.position.x, transform.position.y, 0f);
         }
 
         // ── Inicialización ─────────────────────────────────────────────────────
@@ -199,7 +234,7 @@ namespace Felinaria.Units
             if (GridManager.Instancia == null)
             {
                 // Fallback por si la instancia estática aún no se asignó
-                var gridEnEscena = FindObjectOfType<GridManager>();
+                var gridEnEscena = FindFirstObjectByType<GridManager>();
                 if (gridEnEscena == null)
                 {
                     Debug.LogError($"[UnitController] '{NombreUnidad}': No se encontró GridManager en la escena.");

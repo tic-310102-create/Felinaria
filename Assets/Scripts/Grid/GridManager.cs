@@ -146,6 +146,7 @@ namespace Felinaria.Grid
             // Generar la cuadrícula inmediatamente en Awake para asegurar
             // que todas las celdas existan antes de que las unidades ejecuten Start().
             GenerarCuadricula();
+            ConfigurarCamara2D();
         }
 
         private void Start()
@@ -155,6 +156,34 @@ namespace Felinaria.Grid
             {
                 GenerarCuadricula();
             }
+            ConfigurarCamara2D();
+        }
+
+        // ── Configuración Cámara 2D ───────────────────────────────────────────
+        /// <summary>
+        /// Configura la cámara principal en modo Ortográfico 2D (sin perspectiva ni inclinación)
+        /// y la centra perfectamente sobre el tablero.
+        /// </summary>
+        public void ConfigurarCamara2D()
+        {
+            Camera cam = Camera.main;
+            if (cam == null) cam = FindFirstObjectByType<Camera>();
+            if (cam == null) return;
+
+            // Modo 2D puro: proyección ortográfica y rotación frontal
+            cam.orthographic = true;
+            cam.transform.rotation = Quaternion.identity;
+
+            // Centrar cámara en el medio de la cuadrícula
+            float centroX = OrigenMundo.x + (Columnas - 1) * TamanioCelda * 0.5f;
+            float centroY = OrigenMundo.y + (Filas - 1) * TamanioCelda * 0.5f;
+            cam.transform.position = new Vector3(centroX, centroY, -10f);
+
+            // Ajustar tamaño ortográfico con margen
+            float margen = 1.2f;
+            float altoRequerido = (Filas * TamanioCelda * 0.5f) + margen;
+            float anchoRequerido = ((Columnas * TamanioCelda * 0.5f) / Mathf.Max(0.1f, cam.aspect)) + margen;
+            cam.orthographicSize = Mathf.Max(altoRequerido, anchoRequerido, 5f);
         }
 
         // ── Generación ─────────────────────────────────────────────────────────
@@ -185,8 +214,9 @@ namespace Felinaria.Grid
             AplicarTerrenosDesdeInspector();
 
             EstaInicializado = true;
+            ConfigurarCamara2D();
 
-            Debug.Log($"[GridManager] Cuadrícula generada: {Columnas}x{Filas} = {Columnas * Filas} celdas.");
+            Debug.Log($"[GridManager] Cuadrícula generada: {Columnas}x{Filas} = {Columnas * Filas} celdas en 2D.");
         }
 
         /// <summary>
@@ -194,7 +224,7 @@ namespace Felinaria.Grid
         /// </summary>
         private void CrearCelda(int col, int row)
         {
-            // Calcular posición en el mundo.
+            // Calcular posición en el mundo 2D (Z = 0).
             Vector3 posicion = OrigenMundo + new Vector3(
                 col * TamanioCelda,
                 row * TamanioCelda,
@@ -209,11 +239,19 @@ namespace Felinaria.Grid
             }
             else
             {
-                // Fallback Graybox: cuadrado blanco con SpriteRenderer.
+                // Fallback Graybox: cuadrado blanco 2D con SpriteRenderer y BoxCollider2D.
                 objeto = CrearCuadradoGraybox(posicion);
             }
 
             objeto.name = $"Celda_{col}_{row}";
+
+            // Asegurar BoxCollider2D en la celda para detección de clics 2D
+            if (objeto.GetComponent<Collider2D>() == null)
+            {
+                var col2D = objeto.AddComponent<BoxCollider2D>();
+                col2D.size = Vector2.one * TamanioCelda;
+                col2D.isTrigger = true;
+            }
 
             // Aplicar color tipo tablero de ajedrez.
             var sr = objeto.GetComponent<SpriteRenderer>();
@@ -229,37 +267,44 @@ namespace Felinaria.Grid
         }
 
         /// <summary>
-        /// Crea un cuadrado 2D básico con SpriteRenderer cuando no hay prefab.
-        /// Solo se usa durante el Grayboxing.
+        /// Crea un cuadrado 2D básico con SpriteRenderer y BoxCollider2D.
         /// </summary>
         private GameObject CrearCuadradoGraybox(Vector3 posicion)
         {
             var obj = new GameObject("CeldaGraybox");
             obj.transform.SetParent(_contenedorCeldas);
-            obj.transform.position = posicion;
+            obj.transform.position = new Vector3(posicion.x, posicion.y, 0f);
 
             // Escalar ligeramente por debajo del tamaño de celda para ver las juntas.
             obj.transform.localScale = Vector3.one * (TamanioCelda * 0.95f);
 
             var sr = obj.AddComponent<SpriteRenderer>();
-            // Sprite blanco cuadrado por defecto que viene con Unity.
             sr.sprite = GetSpriteBlanco();
             sr.sortingLayerName = "Default";
             sr.sortingOrder = 0;
 
+            var col2D = obj.AddComponent<BoxCollider2D>();
+            col2D.size = Vector2.one;
+            col2D.isTrigger = true;
+
             return obj;
         }
 
+        private static Sprite _spriteBlancoCache;
+
         /// <summary>
-        /// Devuelve el sprite blanco cuadrado que Unity incluye de serie.
+        /// Devuelve un sprite blanco cuadrado 2D reutilizable.
         /// </summary>
-        private Sprite GetSpriteBlanco()
+        public Sprite GetSpriteBlanco()
         {
-            // "UI/Skin/UISprite" es un sprite cuadrado que siempre está disponible.
-            Texture2D tex = new Texture2D(1, 1);
-            tex.SetPixel(0, 0, Color.white);
+            if (_spriteBlancoCache != null) return _spriteBlancoCache;
+
+            Texture2D tex = new Texture2D(2, 2);
+            Color[] pixels = new Color[] { Color.white, Color.white, Color.white, Color.white };
+            tex.SetPixels(pixels);
             tex.Apply();
-            return Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+            _spriteBlancoCache = Sprite.Create(tex, new Rect(0, 0, 2, 2), new Vector2(0.5f, 0.5f), 2f);
+            return _spriteBlancoCache;
         }
 
         /// <summary>

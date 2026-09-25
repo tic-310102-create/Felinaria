@@ -185,7 +185,7 @@ namespace Felinaria.Managers
                     CambiarEstado(EstadoTurno.TurnoEnemigo);
                     // Fase 3: el EnemyAI se activa automáticamente por evento OnCambioTurno.
                     // Fallback: si no hay EnemyAI, usar el stub original.
-                    if (FindObjectOfType<Felinaria.AI.EnemyAI>() == null)
+                    if (Felinaria.AI.EnemyAI.Instancia == null)
                         StartCoroutine(EjecutarTurnoEnemigoFallback());
                     break;
 

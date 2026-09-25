@@ -78,7 +78,6 @@ namespace Felinaria.UI
 
         // Valores de seguimiento para la animación.
         private float _vidaObjetivoNormalizado;  // Hacia dónde va la barra principal.
-        private float _vidaGhostNormalizado;     // Hacia dónde va la barra ghost.
         private bool  _ghostEsperando;           // True durante el retardo del ghost.
 
         // ── Unity Lifecycle ────────────────────────────────────────────────────
@@ -93,7 +92,6 @@ namespace Felinaria.UI
 
             // Inicializar la barra al 100%.
             _vidaObjetivoNormalizado = 1f;
-            _vidaGhostNormalizado    = 1f;
 
             // Suscribirse al evento de combate para actualizarse automáticamente.
             if (CombatSystem.Instancia != null)

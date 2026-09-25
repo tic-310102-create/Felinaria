@@ -140,7 +140,10 @@ namespace Felinaria.UI
 
         private void Start()
         {
-            _camaraPrincipal = Camera.main;
+            _camaraPrincipal = Camera.main ?? FindFirstObjectByType<Camera>();
+
+            // Auto-instanciar SaveLoadUI como respaldo para asegurar que el panel de guardado esté activo
+            _ = SaveLoadUI.Instancia;
 
             // Buscar Canvas existente en la escena o crear uno automático
             if (CanvasPrincipal == null)
@@ -164,10 +167,10 @@ namespace Felinaria.UI
             ProcesarInput();
         }
 
-        // ── Procesamiento de Input ─────────────────────────────────────────────
+        // ── Procesamiento de Input 2D Puro ────────────────────────────────────
         /// <summary>
         /// Lee clics del mouse / toques en pantalla y actúa según el modo actual.
-        /// Utiliza Physics.Raycast (3D) para interactuar con unidades y tablero.
+        /// Utiliza física 2D (Physics2D) y conversión de coordenadas directas de cuadrícula.
         /// </summary>
         private void ProcesarInput()
         {
@@ -176,24 +179,27 @@ namespace Felinaria.UI
 
             if (!clicIzquierdo && !clicDerecho) return;
 
-            // Ignorar si el clic fue sobre la UI (botones del menú)
+            // Ignorar si el clic fue sobre la UI (botones del menú o panel de guardado)
             if (UnityEngine.EventSystems.EventSystem.current != null &&
                 UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
                 return;
 
             if (_camaraPrincipal == null)
-                _camaraPrincipal = Camera.main;
+                _camaraPrincipal = Camera.main ?? FindFirstObjectByType<Camera>();
 
             if (_camaraPrincipal == null) return;
 
-            // Generar rayo 3D desde la cámara a la posición del cursor
-            Ray ray = _camaraPrincipal.ScreenPointToRay(Input.mousePosition);
+            // Convertir posición del cursor a coordenadas de mundo 2D
+            Vector3 mousePos = Input.mousePosition;
+            mousePos.z = -_camaraPrincipal.transform.position.z;
+            Vector3 world3D = _camaraPrincipal.ScreenToWorldPoint(mousePos);
+            Vector2 world2D = new Vector2(world3D.x, world3D.y);
 
             // Atajo con Clic Secundario (Derecho): Mover directamente a la celda clickeada
             if (clicDerecho && UnidadSeleccionada != null)
             {
                 Debug.Log($"[ActionMenu] Clic secundario detectado → Intento de movimiento directo para '{UnidadSeleccionada.NombreUnidad}'");
-                IntentarMover(ray);
+                IntentarMover2D(world2D);
                 return;
             }
 
@@ -202,108 +208,107 @@ namespace Felinaria.UI
             switch (ModoActual)
             {
                 case ModoInteraccion.Seleccion:
-                    IntentarSeleccionarUnidad(ray);
+                    IntentarSeleccionarUnidad2D(world2D);
                     break;
 
                 case ModoInteraccion.MenuVisible:
-                    // Flujo directo / Fallback: si el jugador hace clic en el tablero con el menú visible
-                    ManejarClicConMenuVisible(ray);
+                    ManejarClicConMenuVisible2D(world2D);
                     break;
 
                 case ModoInteraccion.EsperandoMover:
-                    IntentarMover(ray);
+                    IntentarMover2D(world2D);
                     break;
 
                 case ModoInteraccion.EsperandoAtacar:
-                    IntentarAtacar(ray);
+                    IntentarAtacar2D(world2D);
                     break;
             }
         }
 
         /// <summary>
-        /// Maneja un clic en el tablero cuando el menú de acciones está visible.
-        /// Si se hace clic en otra unidad aliada, se selecciona.
-        /// Si se hace clic en una celda válida del tablero, se mueve la unidad directamente (atajo/fallback).
-        /// Si se hace clic en un enemigo, intenta atacar si está en rango.
+        /// Busca una unidad en la posición del mundo 2D mediante colliders 2D o coordenada de celda.
         /// </summary>
-        private void ManejarClicConMenuVisible(Ray ray)
+        private UnitController ObtenerUnidadEnPosicion2D(Vector2 worldPos)
+        {
+            // 1. Detección con física 2D (BoxCollider2D / CircleCollider2D)
+            Collider2D[] colliders = Physics2D.OverlapCircleAll(worldPos, 0.45f);
+            foreach (var col in colliders)
+            {
+                var unidad = col.GetComponentInParent<UnitController>() ?? col.GetComponent<UnitController>();
+                if (unidad != null) return unidad;
+            }
+
+            // 2. Fallback por coordenada de cuadrícula lógica
+            if (GridManager.Instancia != null)
+            {
+                Vector2Int coord = GridManager.Instancia.MundoACoordenada(new Vector3(worldPos.x, worldPos.y, 0f));
+                if (GridManager.Instancia.EsCoordenadaValida(coord))
+                {
+                    var todas = FindObjectsByType<UnitController>(FindObjectsSortMode.None);
+                    foreach (var u in todas)
+                    {
+                        if (u != null && u.Coordenada == coord && u.VidaActual > 0)
+                            return u;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Maneja un clic en el tablero cuando el menú de acciones está visible.
+        /// </summary>
+        private void ManejarClicConMenuVisible2D(Vector2 worldPos)
         {
             // 1. ¿Clic sobre otra unidad?
-            RaycastHit[] hits = Physics.RaycastAll(ray, 1000f, ~0, QueryTriggerInteraction.Collide);
-            if (hits != null && hits.Length > 0)
+            var u = ObtenerUnidadEnPosicion2D(worldPos);
+            if (u != null)
             {
-                System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-                foreach (var hit in hits)
+                if (u == UnidadSeleccionada)
                 {
-                    var u = hit.collider.GetComponentInParent<UnitController>() ?? hit.collider.GetComponent<UnitController>();
-                    if (u != null)
-                    {
-                        if (u == UnidadSeleccionada)
-                        {
-                            // Clic en la misma unidad seleccionada: mantener menú
-                            return;
-                        }
-                        if (u.BandoUnidad == Bando.Jugador && !u.YaActuoEsteTurno)
-                        {
-                            // Seleccionar otra unidad aliada
-                            SeleccionarUnidad(u);
-                            return;
-                        }
-                        if (u.BandoUnidad == Bando.Enemigo)
-                        {
-                            // Clic en enemigo: intentar atacarlo
-                            IntentarAtacar(ray);
-                            return;
-                        }
-                    }
+                    // Clic en la misma unidad seleccionada: mantener menú
+                    return;
+                }
+                if (u.BandoUnidad == Bando.Jugador && !u.YaActuoEsteTurno)
+                {
+                    // Seleccionar otra unidad aliada
+                    SeleccionarUnidad(u);
+                    return;
+                }
+                if (u.BandoUnidad == Bando.Enemigo)
+                {
+                    // Clic en enemigo: intentar atacarlo
+                    IntentarAtacar2D(worldPos);
+                    return;
                 }
             }
 
             // 2. ¿Clic en una celda del tablero? Intentar mover directamente (Atajo / Fallback)
             if (UnidadSeleccionada != null && GridManager.Instancia != null)
             {
-                if (ObtenerPuntoImpactoTablero(ray, out Vector3 puntoImpacto))
+                Vector2Int coordDestino = GridManager.Instancia.MundoACoordenada(new Vector3(worldPos.x, worldPos.y, 0f));
+                if (GridManager.Instancia.EsCoordenadaValida(coordDestino))
                 {
-                    Vector2Int coordDestino = GridManager.Instancia.MundoACoordenada(puntoImpacto);
-                    if (GridManager.Instancia.EsCoordenadaValida(coordDestino))
+                    if (coordDestino != UnidadSeleccionada.Coordenada)
                     {
-                        if (coordDestino != UnidadSeleccionada.Coordenada)
-                        {
-                            Debug.Log($"[ActionMenu] Clic directo en celda ({coordDestino.x},{coordDestino.y}) → Moviendo directamente.");
-                            IntentarMover(ray);
-                            return;
-                        }
+                        Debug.Log($"[ActionMenu] Clic directo 2D en celda ({coordDestino.x},{coordDestino.y}) → Moviendo directamente.");
+                        IntentarMover2D(worldPos);
+                        return;
                     }
                 }
             }
 
-            // Si clicó fuera del tablero, cerrar menú
+            // Si clicó fuera, cerrar menú
             CerrarMenu();
         }
 
         /// <summary>
-        /// Intenta seleccionar una unidad aliada en la posición del rayo 3D.
+        /// Intenta seleccionar una unidad aliada en la posición del cursor 2D.
         /// </summary>
-        private void IntentarSeleccionarUnidad(Ray ray)
+        private void IntentarSeleccionarUnidad2D(Vector2 worldPos)
         {
-            // RaycastAll 3D para asegurar que encontramos la unidad incluso si hay colliders de celdas o triggers superpuestos.
-            RaycastHit[] hits = Physics.RaycastAll(ray, 1000f, ~0, QueryTriggerInteraction.Collide);
-            if (hits == null || hits.Length == 0) return;
-
-            // Ordenar por cercanía a la cámara
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-
-            UnitController unidad = null;
-            foreach (var hit in hits)
-            {
-                var u = hit.collider.GetComponentInParent<UnitController>() ?? hit.collider.GetComponent<UnitController>();
-                if (u != null)
-                {
-                    unidad = u;
-                    break;
-                }
-            }
-
+            UnitController unidad = ObtenerUnidadEnPosicion2D(worldPos);
             if (unidad == null) return;
 
             // Solo se pueden seleccionar unidades del jugador.
@@ -338,9 +343,9 @@ namespace Felinaria.UI
         }
 
         /// <summary>
-        /// Intenta mover la unidad seleccionada a la celda clickeada en el espacio 3D.
+        /// Intenta mover la unidad seleccionada a la celda 2D clickeada.
         /// </summary>
-        private void IntentarMover(Ray ray)
+        private void IntentarMover2D(Vector2 worldPos)
         {
             if (UnidadSeleccionada == null || GridManager.Instancia == null)
             {
@@ -348,42 +353,7 @@ namespace Felinaria.UI
                 return;
             }
 
-            Vector3 puntoImpacto = Vector3.zero;
-            bool hayImpacto = false;
-
-            // 1. Intentar Raycast 3D contra colliders de la escena (celdas o terreno)
-            if (Physics.Raycast(ray, out RaycastHit hit, 1000f, ~0, QueryTriggerInteraction.Collide))
-            {
-                puntoImpacto = hit.point;
-                hayImpacto = true;
-            }
-            else
-            {
-                // 2. Si las celdas no tienen collider, intersectar con el plano del tablero
-                Plane planoTablero = new Plane(Vector3.forward, GridManager.Instancia.OrigenMundo);
-                if (planoTablero.Raycast(ray, out float distancia))
-                {
-                    puntoImpacto = ray.GetPoint(distancia);
-                    hayImpacto = true;
-                }
-                else
-                {
-                    Plane planoInvertido = new Plane(-Vector3.forward, GridManager.Instancia.OrigenMundo);
-                    if (planoInvertido.Raycast(ray, out distancia))
-                    {
-                        puntoImpacto = ray.GetPoint(distancia);
-                        hayImpacto = true;
-                    }
-                }
-            }
-
-            if (!hayImpacto)
-            {
-                CerrarMenu();
-                return;
-            }
-
-            Vector2Int coordDestino = GridManager.Instancia.MundoACoordenada(puntoImpacto);
+            Vector2Int coordDestino = GridManager.Instancia.MundoACoordenada(new Vector3(worldPos.x, worldPos.y, 0f));
 
             bool exito = UnidadSeleccionada.MoverACelda(coordDestino.x, coordDestino.y);
 
@@ -403,9 +373,9 @@ namespace Felinaria.UI
         }
 
         /// <summary>
-        /// Intenta atacar al enemigo seleccionado mediante Raycast 3D.
+        /// Intenta atacar al enemigo seleccionado mediante detección 2D.
         /// </summary>
-        private void IntentarAtacar(Ray ray)
+        private void IntentarAtacar2D(Vector2 worldPos)
         {
             if (UnidadSeleccionada == null)
             {
@@ -413,25 +383,9 @@ namespace Felinaria.UI
                 return;
             }
 
-            // RaycastAll 3D para encontrar la unidad enemiga clickeada.
-            RaycastHit[] hits = Physics.RaycastAll(ray, 1000f, ~0, QueryTriggerInteraction.Collide);
-            UnitController objetivo = null;
+            UnitController objetivo = ObtenerUnidadEnPosicion2D(worldPos);
 
-            if (hits != null && hits.Length > 0)
-            {
-                System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-                foreach (var hit in hits)
-                {
-                    var u = hit.collider.GetComponentInParent<UnitController>() ?? hit.collider.GetComponent<UnitController>();
-                    if (u != null && u.BandoUnidad == Bando.Enemigo)
-                    {
-                        objetivo = u;
-                        break;
-                    }
-                }
-            }
-
-            if (objetivo == null)
+            if (objetivo == null || objetivo.BandoUnidad != Bando.Enemigo)
             {
                 Debug.Log("[ActionMenu] No se detectó ninguna unidad enemiga en esa posición.");
                 LimpiarResaltado();
@@ -535,6 +489,42 @@ namespace Felinaria.UI
         {
             if (_panelMenu != null)
                 _panelMenu.SetActive(false);
+        }
+
+        /// <summary>
+        /// Lanza un rayo contra colliders de la escena o el plano del tablero
+        /// y devuelve el punto de impacto en coordenadas mundo.
+        /// </summary>
+        private bool ObtenerPuntoImpactoTablero(Ray ray, out Vector3 puntoImpacto)
+        {
+            puntoImpacto = Vector3.zero;
+
+            // 1. Intentar Raycast 3D contra colliders
+            if (Physics.Raycast(ray, out RaycastHit hit, 1000f, ~0, QueryTriggerInteraction.Collide))
+            {
+                puntoImpacto = hit.point;
+                return true;
+            }
+
+            // 2. Fallback: intersectar con el plano del tablero
+            if (GridManager.Instancia != null)
+            {
+                Plane planoTablero = new Plane(Vector3.forward, GridManager.Instancia.OrigenMundo);
+                if (planoTablero.Raycast(ray, out float distancia))
+                {
+                    puntoImpacto = ray.GetPoint(distancia);
+                    return true;
+                }
+
+                Plane planoInvertido = new Plane(-Vector3.forward, GridManager.Instancia.OrigenMundo);
+                if (planoInvertido.Raycast(ray, out distancia))
+                {
+                    puntoImpacto = ray.GetPoint(distancia);
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
