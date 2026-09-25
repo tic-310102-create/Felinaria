@@ -607,6 +607,7 @@ namespace Felinaria.Units
             if (healthBar != null)
             {
                 healthBar.ActualizarBarra();
+                healthBar.ActualizarMana(ManaActual, ManaMaximo);
             }
 
             if (!estaViva || VidaActual <= 0)

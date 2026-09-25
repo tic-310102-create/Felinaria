@@ -71,11 +71,18 @@ namespace Felinaria.UI
         private void Awake()
         {
             _unidad = GetComponent<UnitController>();
+            if (_canvas == null)
+            {
+                CrearBarraVisual();
+            }
         }
 
         private void Start()
         {
-            CrearBarraVisual();
+            if (_canvas == null)
+            {
+                CrearBarraVisual();
+            }
             ActualizarBarra();
 
             if (CombatSystem.Instancia != null)
@@ -156,6 +163,22 @@ namespace Felinaria.UI
         // ── Creación visual ────────────────────────────────────────────────────
         private void CrearBarraVisual()
         {
+            if (_canvas != null) return;
+
+            if (_unidad == null)
+            {
+                _unidad = GetComponent<UnitController>();
+            }
+
+            if (_unidad != null)
+            {
+                float vm = _unidad.VidaMaxima > 0 ? _unidad.VidaMaxima : 1;
+                _vidaObjetivoNormalizado = Mathf.Clamp01((float)_unidad.VidaActual / vm);
+
+                float mm = _unidad.ManaMaximo > 0 ? _unidad.ManaMaximo : 1;
+                _manaObjetivoNormalizado = Mathf.Clamp01((float)_unidad.ManaActual / mm);
+            }
+
             var canvasObj = new GameObject("HealthBar_Canvas");
             canvasObj.transform.SetParent(transform);
             canvasObj.transform.localPosition = Vector3.up * OffsetY;
@@ -184,13 +207,14 @@ namespace Felinaria.UI
             ConfigurarRectTransformEstirado(_imagenGhostHP.GetComponent<RectTransform>());
             _imagenGhostHP.type = Image.Type.Filled;
             _imagenGhostHP.fillMethod = Image.FillMethod.Horizontal;
-            _imagenGhostHP.fillAmount = 1f;
+            _imagenGhostHP.fillAmount = _vidaObjetivoNormalizado;
 
             _imagenRellenoHP = CrearImagen("RellenoHP", hpContainer.transform, ColorVidaAlta);
             ConfigurarRectTransformEstirado(_imagenRellenoHP.GetComponent<RectTransform>());
             _imagenRellenoHP.type = Image.Type.Filled;
             _imagenRellenoHP.fillMethod = Image.FillMethod.Horizontal;
-            _imagenRellenoHP.fillAmount = 1f;
+            _imagenRellenoHP.fillAmount = _vidaObjetivoNormalizado;
+            _imagenRellenoHP.color = ObtenerColorVida(_vidaObjetivoNormalizado);
 
             // ── 2. Contenedor Barra Maná (parte inferior 28%) ──────────────────
             var manaContainer = new GameObject("Mana_Container");
@@ -208,7 +232,7 @@ namespace Felinaria.UI
             ConfigurarRectTransformEstirado(_imagenRellenoMana.GetComponent<RectTransform>());
             _imagenRellenoMana.type = Image.Type.Filled;
             _imagenRellenoMana.fillMethod = Image.FillMethod.Horizontal;
-            _imagenRellenoMana.fillAmount = 1f;
+            _imagenRellenoMana.fillAmount = _manaObjetivoNormalizado;
         }
 
         private Image CrearImagen(string nombre, Transform padre, Color color)
@@ -247,6 +271,10 @@ namespace Felinaria.UI
         public void ActualizarBarra()
         {
             if (_unidad == null) return;
+            if (_canvas == null)
+            {
+                CrearBarraVisual();
+            }
 
             float vidaMax = _unidad.VidaMaxima > 0 ? _unidad.VidaMaxima : 1;
             _vidaObjetivoNormalizado = Mathf.Clamp01((float)_unidad.VidaActual / vidaMax);
@@ -255,7 +283,28 @@ namespace Felinaria.UI
             _manaObjetivoNormalizado = Mathf.Clamp01((float)_unidad.ManaActual / manaMax);
 
             _ghostEsperando = true;
-            StartCoroutine(RetardarGhost());
+            if (gameObject.activeInHierarchy)
+            {
+                StartCoroutine(RetardarGhost());
+            }
+        }
+
+        /// <summary>
+        /// Actualiza de forma inmediata y directa la barra de maná con los valores dados.
+        /// </summary>
+        public void ActualizarMana(int manaActual, int manaMaximo)
+        {
+            if (_canvas == null)
+            {
+                CrearBarraVisual();
+            }
+
+            if (manaMaximo <= 0) manaMaximo = 1;
+            _manaObjetivoNormalizado = Mathf.Clamp01((float)manaActual / manaMaximo);
+            if (_imagenRellenoMana != null)
+            {
+                _imagenRellenoMana.fillAmount = _manaObjetivoNormalizado;
+            }
         }
 
         private IEnumerator RetardarGhost()
