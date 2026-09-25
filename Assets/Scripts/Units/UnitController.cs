@@ -469,6 +469,49 @@ namespace Felinaria.Units
             AplicarColorVisual(ColorNormal);
         }
 
+        /// <summary>
+        /// Restaura el estado guardado de la unidad (coordenadas lógicas, posición mundo, vida, turno y visuales).
+        /// </summary>
+        public void RestaurarEstado(int col, int fila, int vida, int vidaMax, bool yaActuo, bool estaViva)
+        {
+            if (vidaMax > 0) VidaMaxima = vidaMax;
+            VidaActual = Mathf.Clamp(vida, 0, VidaMaxima);
+            ColInicial = col;
+            FilaInicial = fila;
+            Coordenada = new Vector2Int(col, fila);
+            YaActuoEsteTurno = yaActuo;
+
+            // Actualizar posición física en el mundo
+            if (GridManager.Instancia != null)
+            {
+                transform.position = GridManager.Instancia.CoordenadaAMundo(col, fila);
+            }
+            else
+            {
+                transform.position = new Vector3(col, fila, 0f);
+            }
+
+            AplicarColorVisual(yaActuo ? ColorUsado : ColorNormal);
+
+            // Actualizar barra de vida
+            var healthBar = GetComponent<Felinaria.UI.HealthBar>();
+            if (healthBar != null)
+            {
+                healthBar.ActualizarBarra();
+            }
+
+            if (!estaViva || VidaActual <= 0)
+            {
+                gameObject.SetActive(false);
+            }
+            else
+            {
+                gameObject.SetActive(true);
+            }
+
+            Debug.Log($"[UnitController] '{NombreUnidad}' restaurado: Pos=({col},{fila}), HP={VidaActual}/{VidaMaxima}, Actuo={yaActuo}");
+        }
+
         // ── Combate ────────────────────────────────────────────────────────────
         /// <summary>
         /// Aplica daño a la unidad. Si la vida llega a 0, la elimina.

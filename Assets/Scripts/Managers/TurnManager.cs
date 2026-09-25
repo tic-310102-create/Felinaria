@@ -90,7 +90,7 @@ namespace Felinaria.Managers
         public EstadoTurno EstadoActual { get; private set; } = EstadoTurno.Inactivo;
 
         /// <summary>Número de ronda actual (comienza en 1).</summary>
-        public int RondaActual { get; private set; } = 0;
+        public int RondaActual { get; set; } = 0;
 
         // ── Eventos C# ─────────────────────────────────────────────────────────
         public event Action<EstadoTurno> OnCambioTurno;

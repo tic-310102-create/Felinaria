@@ -125,7 +125,10 @@ namespace Felinaria.Data
                 _tiempoAcumuladoPrevio = datos.TiempoJugadoSegundos;
                 _tiempoInicioSesion = Time.realtimeSinceStartup;
 
-                Debug.Log($"[SaveSystem] ✅ Partida cargada exitosamente.");
+                // Aplicar estado inmediatamente a la escena (unidades, HP, posiciones, ocupación)
+                AplicarEstadoCargado(datos);
+
+                Debug.Log($"[SaveSystem] ✅ Partida cargada y aplicada exitosamente.");
                 Debug.Log($"[SaveSystem] {datos}");
             }
             else
@@ -134,6 +137,98 @@ namespace Felinaria.Data
             }
 
             return datos;
+        }
+
+        /// <summary>
+        /// Aplica los datos cargados directamente a la escena en tiempo real:
+        /// restaura posiciones de unidades, vida, ocupación del grid y estado de ronda.
+        /// </summary>
+        public static void AplicarEstadoCargado(GameData datos)
+        {
+            if (datos == null) return;
+
+            // 1. Limpiar ocupación previa en el GridManager
+            if (GridManager.Instancia != null)
+            {
+                for (int c = 0; c < GridManager.Instancia.Columnas; c++)
+                {
+                    for (int f = 0; f < GridManager.Instancia.Filas; f++)
+                    {
+                        GridManager.Instancia.SetOcupacion(c, f, false);
+                    }
+                }
+            }
+
+            // 2. Restaurar TurnManager
+            if (TurnManager.Instancia != null)
+            {
+                TurnManager.Instancia.RondaActual = datos.RondaActual;
+            }
+
+            // 3. Buscar todas las unidades en la escena
+            var unidadesEnEscena = UnityEngine.Object.FindObjectsByType<UnitController>(FindObjectsSortMode.None);
+            var unidadesNoEmparejadas = new List<UnitController>(unidadesEnEscena);
+
+            if (datos.Unidades != null)
+            {
+                foreach (var datosU in datos.Unidades)
+                {
+                    if (datosU == null) continue;
+
+                    // Buscar unidad por nombre coincidente
+                    UnitController unidadEncontrada = null;
+                    for (int i = 0; i < unidadesNoEmparejadas.Count; i++)
+                    {
+                        if (unidadesNoEmparejadas[i] != null && unidadesNoEmparejadas[i].NombreUnidad == datosU.NombreUnidad)
+                        {
+                            unidadEncontrada = unidadesNoEmparejadas[i];
+                            unidadesNoEmparejadas.RemoveAt(i);
+                            break;
+                        }
+                    }
+
+                    // Fallback: buscar por bando si el nombre difiere
+                    if (unidadEncontrada == null)
+                    {
+                        for (int i = 0; i < unidadesNoEmparejadas.Count; i++)
+                        {
+                            if (unidadesNoEmparejadas[i] != null && (int)unidadesNoEmparejadas[i].BandoUnidad == datosU.Bando)
+                            {
+                                unidadEncontrada = unidadesNoEmparejadas[i];
+                                unidadesNoEmparejadas.RemoveAt(i);
+                                break;
+                            }
+                        }
+                    }
+
+                    if (unidadEncontrada != null)
+                    {
+                        unidadEncontrada.RestaurarEstado(
+                            datosU.Columna,
+                            datosU.Fila,
+                            datosU.VidaActual,
+                            datosU.VidaMaxima,
+                            datosU.YaActuoEsteTurno,
+                            datosU.EstaViva
+                        );
+
+                        // Marcar celda ocupada si la unidad sigue viva
+                        if (datosU.EstaViva && datosU.VidaActual > 0 && GridManager.Instancia != null)
+                        {
+                            GridManager.Instancia.SetOcupacion(datosU.Columna, datosU.Fila, true);
+                        }
+                    }
+                }
+            }
+
+            // 4. Restaurar configuración de audio si existe
+            if (datos.ConfiguracionAudio != null && Felinaria.Audio.AudioManager.Instancia != null)
+            {
+                Felinaria.Audio.AudioManager.Instancia.SetVolumenMusica(datos.ConfiguracionAudio.VolumenMusica);
+                Felinaria.Audio.AudioManager.Instancia.SetVolumenSFX(datos.ConfiguracionAudio.VolumenSFX);
+            }
+
+            Debug.Log($"[SaveSystem] ✅ Sincronización visual y lógica de carga completada.");
         }
 
         /// <summary>

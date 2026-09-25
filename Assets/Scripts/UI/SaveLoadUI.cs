@@ -66,7 +66,7 @@ namespace Felinaria.UI
 
         [Header("Configuración Visual")]
         [Tooltip("Posición del panel desde la esquina superior-derecha.")]
-        public Vector2 PosicionPanel = new Vector2(-15f, -15f);
+        public Vector2 PosicionPanel = new Vector2(-25f, -25f);
 
         // ── Referencias internas ───────────────────────────────────────────────
         private Text _textoEstado;
@@ -116,11 +116,20 @@ namespace Felinaria.UI
                 CanvasUI.renderMode = RenderMode.ScreenSpaceOverlay;
                 CanvasUI.sortingOrder = 200;
 
-                var scaler = canvasObj.AddComponent<CanvasScaler>();
+                canvasObj.AddComponent<GraphicRaycaster>();
+            }
+
+            // Asegurar CanvasScaler configurado en ScaleWithScreenSize a 1920x1080
+            if (CanvasUI != null)
+            {
+                var scaler = CanvasUI.GetComponent<CanvasScaler>();
+                if (scaler == null)
+                    scaler = CanvasUI.gameObject.AddComponent<CanvasScaler>();
+
                 scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
                 scaler.referenceResolution = new Vector2(1920, 1080);
-
-                canvasObj.AddComponent<GraphicRaycaster>();
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+                scaler.matchWidthOrHeight = 0.5f;
             }
 
             // Asegurar EventSystem.
@@ -161,7 +170,7 @@ namespace Felinaria.UI
 
         // ── Creación de UI ─────────────────────────────────────────────────────
         /// <summary>
-        /// Crea el panel con botones de guardado/carga por código.
+        /// Crea el panel con botones de guardado/carga por código con diseño amplio y legible.
         /// </summary>
         private void CrearPanelBotones()
         {
@@ -171,7 +180,7 @@ namespace Felinaria.UI
             _panelInstanciado = panelObj;
 
             var panelImg = panelObj.AddComponent<Image>();
-            panelImg.color = new Color(0.08f, 0.08f, 0.12f, 0.85f);
+            panelImg.color = new Color(0.08f, 0.08f, 0.14f, 0.92f);
 
             var rectPanel = panelObj.GetComponent<RectTransform>();
             rectPanel.anchorMin = new Vector2(1f, 1f);  // Esquina superior-derecha.
@@ -179,10 +188,10 @@ namespace Felinaria.UI
             rectPanel.pivot = new Vector2(1f, 1f);
             rectPanel.anchoredPosition = PosicionPanel;
 
-            // Layout vertical.
+            // Layout vertical amplio para resolución 1080p.
             var layout = panelObj.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(8, 8, 8, 8);
-            layout.spacing = 5f;
+            layout.padding = new RectOffset(16, 16, 16, 16);
+            layout.spacing = 10f;
             layout.childAlignment = TextAnchor.UpperCenter;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
@@ -194,7 +203,7 @@ namespace Felinaria.UI
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // ── Título ─────────────────────────────────────────────────────────
-            CrearTexto(panelObj.transform, "GUARDADO", 14, FontStyle.Bold, Color.white);
+            CrearTexto(panelObj.transform, "💾 GUARDADO", 20, FontStyle.Bold, Color.white);
 
             // ── Botones ────────────────────────────────────────────────────────
             CrearBoton(panelObj.transform, "Guardar (F5)",
@@ -206,12 +215,12 @@ namespace Felinaria.UI
             CrearBoton(panelObj.transform, "Borrar Save",
                 new Color(0.7f, 0.3f, 0.3f), OnBotonBorrar);
 
-            CrearBoton(panelObj.transform, "Sincronizar",
+            CrearBoton(panelObj.transform, "☁️ Sincronizar",
                 new Color(0.6f, 0.4f, 0.8f), OnBotonSincronizar);
 
             // ── Texto de estado ────────────────────────────────────────────────
-            _textoEstado = CrearTexto(panelObj.transform, "Estado: Listo", 11,
-                FontStyle.Normal, new Color(0.7f, 0.7f, 0.7f));
+            _textoEstado = CrearTexto(panelObj.transform, "Estado: Listo", 15,
+                FontStyle.Normal, new Color(0.8f, 0.8f, 0.85f));
         }
 
         // ── Callbacks de botones ───────────────────────────────────────────────
@@ -296,12 +305,12 @@ namespace Felinaria.UI
             var btnObj = new GameObject($"Btn_{texto}");
             btnObj.transform.SetParent(padre, false);
 
-            // LayoutElement para que el layout no colapse el botón.
+            // LayoutElement amplio para resolución 1080p
             var le = btnObj.AddComponent<LayoutElement>();
-            le.minWidth = 150f;
-            le.preferredWidth = 150f;
-            le.minHeight = 32f;
-            le.preferredHeight = 32f;
+            le.minWidth = 240f;
+            le.preferredWidth = 240f;
+            le.minHeight = 54f;
+            le.preferredHeight = 54f;
 
             var img = btnObj.AddComponent<Image>();
             img.color = color;
@@ -317,7 +326,7 @@ namespace Felinaria.UI
             txt.text = texto;
             txt.color = Color.white;
             txt.font = _fuenteCache;
-            txt.fontSize = 13;
+            txt.fontSize = 18;
             txt.alignment = TextAnchor.MiddleCenter;
             txt.fontStyle = FontStyle.Bold;
             txt.raycastTarget = false;
@@ -340,8 +349,8 @@ namespace Felinaria.UI
             obj.transform.SetParent(padre, false);
 
             var le = obj.AddComponent<LayoutElement>();
-            le.minHeight = 24f;
-            le.preferredHeight = 24f;
+            le.minHeight = (tamanio >= 20) ? 36f : 30f;
+            le.preferredHeight = (tamanio >= 20) ? 36f : 30f;
 
             var txt = obj.AddComponent<Text>();
             txt.text = contenido;
