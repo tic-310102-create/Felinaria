@@ -111,10 +111,10 @@ namespace Felinaria.Managers
 
             if (res.Atacante != null && res.Atacante.BandoUnidad == Bando.Jugador)
             {
-                DanioTotalInfligido += res.DanioInfligido;
+                DanioTotalInfligido += res.DanioAplicado;
             }
 
-            if (res.FueEliminado)
+            if (res.ObjetivoEliminado)
             {
                 if (res.Objetivo != null && res.Objetivo.BandoUnidad == Bando.Enemigo)
                     BajasEnemigas++;
